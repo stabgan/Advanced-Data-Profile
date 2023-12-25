@@ -18,11 +18,35 @@ from scipy.stats import entropy, t, chi2, probplot, shapiro, norm, ttest_1samp, 
 from statsmodels.stats.proportion import proportion_confint
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
+import dateutil.parser as dparser
+
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
 
 schema_name = "schema"
 table_name = "table"
+
+
+# Custom function to determine the data type of a column
+def custom_data_type(col):
+    if col.isnull().all():
+        return 'empty'
+    if pd.api.types.is_numeric_dtype(col):
+        if (col.dropna() % 1 == 0).all():
+            return 'integer'
+        else:
+            return 'float'
+    if pd.api.types.is_string_dtype(col):
+        try:
+            first_value = col.dropna().iloc[0]
+            parsed_date = dparser.parse(first_value, fuzzy=False)
+            if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0:
+                return 'date'
+            else:
+                return 'timestamp'
+        except (ValueError, TypeError):
+            return 'string'
+    return 'string'
 
 
 def detect_language_with_confidence(text):
@@ -89,32 +113,27 @@ def identify_column_type(col):
     elif len(unique_results) == 1 and unique_results[0] == 'timestamp':
         return 'timestamp column'
 
-def first_phase(env: str, schema_name: str, table_name: str, file_path: str):
-    date_time = datetime.now().strftime("%m-%d-%Y | %I-%M %p")
-    data_volume = os.path.getsize(file_path)
-    data_volume_kb = data_volume / 1024
 
+def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
+    date_time = datetime.now().strftime("%m-%d-%Y | %I-%M %p")
+    data_volume = os.path.getsize(file_path) / 1024
     total_ram = psutil.virtual_memory().total / (1024 ** 3)
     available_ram = psutil.virtual_memory().available / (1024 ** 3)
-
     chunksize = 10 ** 6 if data_volume > available_ram else None
-    df = pd.read_csv(file_path, chunksize=chunksize)
-    df = pd.concat(df, ignore_index=True) if chunksize else df
-
-    try:
+    if chunksize:
+        df_chunks = pd.read_csv(file_path, chunksize=chunksize)
+        df = pd.concat(df_chunks, ignore_index=True)
+    else:
+        df = pd.read_csv(file_path)
+    if 'Unnamed: 0' in df.columns:
         df = df.drop('Unnamed: 0', axis=1)
-    except KeyError:
-        print("No index columns are there to drop.")
-
+    custom_data_types = {col: custom_data_type(df[col]) for col in df.columns}
     shape = df.shape
     column_names = df.columns.tolist()
-    data_types = df.dtypes.to_dict()
     has_duplicates = df.duplicated().any()
     n_rows = min(10, df.shape[0])
     random_rows_df = df.sample(n=n_rows)
-    memory_usage = df.memory_usage(deep=True).sum()
-    memory_usage_kb = memory_usage / 1024
-
+    memory_usage = df.memory_usage(deep=True).sum() / 1024
     info_dict = {
         'Environment': env,
         'Schema Name': schema_name,
@@ -122,118 +141,99 @@ def first_phase(env: str, schema_name: str, table_name: str, file_path: str):
         'Date/Time': date_time,
         'Shape': shape,
         'Column Names': column_names,
-        'Data Types': data_types,
+        'Custom Data Types': custom_data_types,
         'Has Duplicates': 'Yes' if has_duplicates else 'No',
-        'Memory Usage': f'{memory_usage_kb:.1f} KB',
-        'Data Volume': f'{data_volume_kb:.1f} KB',
+        'Memory Usage': f'{memory_usage:.1f} KB',
+        'Data Volume': f'{data_volume:.1f} KB',
         'Total RAM': f'{total_ram:.1f} GB',
         'Available RAM': f'{available_ram:.1f} GB',
         'Total Row Count': df.shape[0],
         'Total Column Count': df.shape[1]
     }
-
     return info_dict, random_rows_df, df
 
 
 # # Get DataFrame info and random rows
-df_info, random_rows_df, df = first_phase('prod', 'schema', 'table', 'data/input_data.csv')
+df_info, random_rows_df, df = first_phase('data/input_data.csv','prod', 'schema', 'table')
+
+# Iterate through the info dictionary and print the values
+for key, value in df_info.items():
+    print(f"{key}: {value}")
+
+# Print the random rows DataFrame
+print("\nRandom Rows:")
+print(random_rows_df)
 
 
-
-# # Iterate through the info dictionary and print the values
-# for key, value in df_info.items():
-#     print(f"{key}: {value}")
-#
-# # Print the random rows DataFrame
-# print("\nRandom Rows:")
-# print(random_rows_df)
-
-
-def second_phase(df: pd.DataFrame):
-    # Initialize counters and variables
-    data_types_count = df.dtypes.value_counts().to_dict()
-    int_count = data_types_count.get(np.dtype('int64'), 0)
-    float_count = data_types_count.get(np.dtype('float64'), 0)
-    object_count = data_types_count.get(np.dtype('object'), 0)
+def second_phase(df: pd.DataFrame, custom_data_types: dict):
+    int_count = 0
+    float_count = 0
     date_count = 0
     timestamp_count = 0
+    string_count = 0
     double_count = 0
     categorical_info = {}
     max_string_length = 0
+    max_decimal_places = 0
     total_zero_percent_count = 0
     total_hundred_percent_count = 0
-
-    # Calculate total_rows here
     total_rows = df.shape[0]
-
     for col in df.columns:
         col_data = df[col].dropna()
-        data_type = str(col_data.dtype)
-
-        # Replace match-case with traditional if-elif-else for Python 3.9 compatibility
-        if data_type == 'float64':
-            # Double Column Calculation
-            max_decimal_places = col_data.apply(
-                lambda x: len(str(x).rstrip('0').split('.')[1]) if pd.notnull(x) and '.' in str(x) else 0).max()
-            if max_decimal_places > 6:  # Assuming double precision if more than 6 decimal places
+        data_type = custom_data_types[col]
+        if data_type == 'integer':
+            int_count += 1
+        elif data_type == 'float':
+            float_count += 1
+            decimals = col_data.apply(lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0)
+            max_decimal_places_col = decimals.max()
+            max_decimal_places = max(max_decimal_places, max_decimal_places_col)
+            if max_decimal_places_col > 6:
                 double_count += 1
-
-        elif data_type in ['object', 'category']:
-            # Date, Timestamp, and Categorical Column Detection
-            sample_values = col_data.sample(min(10, len(col_data)))  # Sample up to 10 values
-            detected_types = sample_values.apply(is_date_or_timestamp)
-            if all(detected_types == 'date'):
-                date_count += 1
-            elif all(detected_types == 'timestamp'):
-                timestamp_count += 1
-
-            # Calculate maximum string length
+        elif data_type in ['string', 'category']:
+            string_count += 1
             max_length_in_col = col_data.astype(str).map(len).max()
             max_string_length = max(max_string_length, max_length_in_col)
-
-            col_data = df[col].dropna()
-            confidence = categorical_confidence(col_data, total_rows)
-            if confidence > 50:  # Setting a threshold for confidence
-                categorical_info[col] = confidence
-
-        # Counting 0% and 100% record count columns
-        if df[col].isnull().mean() == 1:
+            if categorical_confidence(col_data, total_rows) > 50:
+                categorical_info[col] = categorical_confidence(col_data, total_rows)
+        elif data_type == 'date':
+            date_count += 1
+        elif data_type == 'timestamp':
+            timestamp_count += 1
+        if col_data.empty:
             total_zero_percent_count += 1
-        if df[col].notnull().mean() == 1:
+        elif col_data.count() == total_rows:
             total_hundred_percent_count += 1
-
-    # Other metrics
     total_null_count = df.isnull().sum().sum()
     total_not_null_count = df.notnull().sum().sum()
     info_dict = {
-        'Total Data Type Count': len(data_types_count),
+        'Total Data Type Count': len(custom_data_types),
         'Int Column Count': int_count,
         'Float Column Count': float_count,
-        'Object Column Count': object_count,
+        'String Column Count': string_count,
         'Date Column Count': date_count,
-        'TIMESTAMP Column Count': timestamp_count,
+        'Timestamp Column Count': timestamp_count,
         'Double Column Count': double_count,
         'Categorical Columns and Confidence Levels': categorical_info,
         'Maximum String Length': max_string_length,
+        'Maximum Decimal Places': max_decimal_places,
         'Total Null Record Count': total_null_count,
         'Total Not Null Record Count': total_not_null_count,
         'Total number of 0% Record Count': total_zero_percent_count,
         'Total number of 100% Record Count': total_hundred_percent_count
     }
-
     return info_dict
 
 
-# # Get second phase info
-# second_phase_info = second_phase(df)
-#
-# # Iterate through the info dictionary and print the values
-# for key, value in second_phase_info.items():
-#     print(f"{key}: {value}")
-#
-# print()
-# print()
+# Get second phase info
+second_phase_info = second_phase(df, df_info['Custom Data Types'])
 
+# Iterate through the info dictionary and print the values
+for key, value in second_phase_info.items():
+    print(f"{key}: {value}")
+
+print()
+print()
 
 
 def third_phase(df: pd.DataFrame):
@@ -289,22 +289,22 @@ def third_phase(df: pd.DataFrame):
     return column_details
 
 
-# # Get third phase info
-# third_phase_info = third_phase(df)
-#
-# # Iterate over the list of dictionaries
-# for column_info in third_phase_info:
-#     # Print the column name
-#     print(f"Column Name: {column_info['Column Name']}")
-#
-#     # Iterate over the keys and values in the dictionary
-#     for key, value in column_info.items():
-#         # Skip the column name as we have already printed it
-#         if key != 'Column Name':
-#             print(f"{key}: {value}")
-#
-#     # Print a separator for readability
-#     print("-" * 50)
+# Get third phase info
+third_phase_info = third_phase(df)
+
+# Iterate over the list of dictionaries
+for column_info in third_phase_info:
+    # Print the column name
+    print(f"Column Name: {column_info['Column Name']}")
+
+    # Iterate over the keys and values in the dictionary
+    for key, value in column_info.items():
+        # Skip the column name as we have already printed it
+        if key != 'Column Name':
+            print(f"{key}: {value}")
+
+    # Print a separator for readability
+    print("-" * 50)
 
 
 # Function to handle statistical analysis and visualization for each column
@@ -317,8 +317,10 @@ def plot_wordcloud(text, ax):
     except ValueError as e:
         print(f"Error in wordcloud generation: {e, text}")
 
+
 def plot_violin(data, ax):
     sns.violinplot(x=data, ax=ax)
+
 
 def base64_encode_plot(fig):
     buf = BytesIO()
@@ -355,7 +357,7 @@ def fourth_phase(df):
             axs[2].set_title(f'Boxplot of {col}')
 
         elif df[col].dtype == object:
-            if identify_column_type(df[col]) not in ['date column','timestamp column']:
+            if identify_column_type(df[col]) not in ['date column', 'timestamp column']:
                 # Wordcloud
                 combined_text = " ".join(col_data)
 
@@ -365,7 +367,6 @@ def fourth_phase(df):
                 frequency = col_data.value_counts().head(10)
                 frequency.plot(kind='bar', ax=axs[1])
                 axs[1].set_title(f'Frequency of top categories in {col}')
-
 
                 # TF-IDF analysis
                 # Clean the data
@@ -377,7 +378,7 @@ def fourth_phase(df):
                     tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
                     results[f"{col}_tfidf"] = tfidf_df.mean().sort_values(ascending=False).head(10).to_dict()
                 except ValueError as e:
-                    print(f"Error in TF-IDF analysis: {e,col}")
+                    print(f"Error in TF-IDF analysis: {e, col}")
             else:
                 pass
 
@@ -386,5 +387,6 @@ def fourth_phase(df):
 
     return results
 
-fourth_phase_results = fourth_phase(df)
-print(fourth_phase_results.keys())
+
+fourth_phase_data = fourth_phase(df)
+# print(fourth_phase_data)
