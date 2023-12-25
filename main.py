@@ -168,63 +168,74 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
 # print(random_rows_df)
 
 
-def second_phase(df: pd.DataFrame, custom_data_types: dict):
-    int_count = 0
-    float_count = 0
-    date_count = 0
-    timestamp_count = 0
-    string_count = 0
-    double_count = 0
+def second_phase(df, custom_data_types):
+    # Initialize counters and lists to hold column names for each data type
+    int_columns = []
+    float_columns = []
+    string_columns = []
+    date_columns = []
+    timestamp_columns = []
+    double_columns = []
     categorical_info = {}
     max_string_length = 0
     max_decimal_places = 0
     total_zero_percent_count = 0
     total_hundred_percent_count = 0
     total_rows = df.shape[0]
+
     for col in df.columns:
         col_data = df[col].dropna()
         data_type = custom_data_types[col]
+
         if data_type == 'integer':
-            int_count += 1
+            int_columns.append(col)
         elif data_type == 'float':
-            float_count += 1
+            float_columns.append(col)
             decimals = col_data.apply(lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0)
             max_decimal_places_col = decimals.max()
             max_decimal_places = max(max_decimal_places, max_decimal_places_col)
             if max_decimal_places_col > 6:
-                double_count += 1
+                double_columns.append(col)
         elif data_type in ['string', 'category']:
-            string_count += 1
+            string_columns.append(col)
             max_length_in_col = col_data.astype(str).map(len).max()
             max_string_length = max(max_string_length, max_length_in_col)
             if categorical_confidence(col_data, total_rows) > 50:
                 categorical_info[col] = categorical_confidence(col_data, total_rows)
         elif data_type == 'date':
-            date_count += 1
+            date_columns.append(col)
         elif data_type == 'timestamp':
-            timestamp_count += 1
+            timestamp_columns.append(col)
         if col_data.empty:
             total_zero_percent_count += 1
         elif col_data.count() == total_rows:
             total_hundred_percent_count += 1
+
     total_null_count = df.isnull().sum().sum()
     total_not_null_count = df.notnull().sum().sum()
+
     info_dict = {
         'Total Data Type Count': len(custom_data_types),
-        'Int Column Count': int_count,
-        'Float Column Count': float_count,
-        'String Column Count': string_count,
-        'Date Column Count': date_count,
-        'Timestamp Column Count': timestamp_count,
-        'Double Column Count': double_count,
+        'Int Column Count': len(int_columns),
+        'Float Column Count': len(float_columns),
+        'String Column Count': len(string_columns),
+        'Date Column Count': len(date_columns),
+        'Timestamp Column Count': len(timestamp_columns),
+        'Double Column Count': len(double_columns),
         'Categorical Columns and Confidence Levels': categorical_info,
         'Maximum String Length': max_string_length,
         'Maximum Decimal Places': max_decimal_places,
         'Total Null Record Count': total_null_count,
         'Total Not Null Record Count': total_not_null_count,
         'Total number of 0% Record Count': total_zero_percent_count,
-        'Total number of 100% Record Count': total_hundred_percent_count
+        'Total number of 100% Record Count': total_hundred_percent_count,
+        'Int Columns': int_columns,
+        'Float Columns': float_columns,
+        'String Columns': string_columns,
+        'Date Columns': date_columns,
+        'Timestamp Columns': timestamp_columns,
     }
+
     return info_dict
 
 
@@ -351,6 +362,7 @@ def get_image_base64(fig):
     buf.seek(0)
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
     buf.close()
+    plt.close(fig)  # Close the figure after encoding
     return image_base64
 
 
