@@ -236,21 +236,21 @@ print()
 print()
 
 
-def third_phase(df: pd.DataFrame):
+def third_phase(df: pd.DataFrame, custom_data_types: dict):
     column_details = []
 
     for col in df.columns:
         col_data = df[col]
-        data_type = col_data.dtype
-        null_count = col_data.isnull().sum()
-        non_null_count = col_data.notnull().sum()
+        data_type = custom_data_types[col]  # Using custom data type
         total_count = len(col_data)
+        null_count = col_data.isnull().sum()
+        non_null_count = total_count - null_count
         unique_values = col_data.nunique()
         top_10_values = col_data.value_counts().head(10).to_dict()
 
         column_info = {
             "Column Name": col,
-            "Column Data Type": str(data_type),
+            "Column Data Type": data_type,
             "NULL Record Count": null_count,
             "Percentage of NULL Values": null_count / total_count * 100,
             "NOT NULL Record Count": non_null_count,
@@ -261,13 +261,14 @@ def third_phase(df: pd.DataFrame):
         }
 
         # Additional metrics for numeric and string data
-        if np.issubdtype(data_type, np.number):
+        if data_type == 'integer' or data_type == 'float':
             column_info["Median"] = col_data.median()
-            if np.issubdtype(data_type, np.float64):
-                column_info["Max Decimal Precision"] = col_data.apply(
-                    lambda x: np.floor(np.log10(x)) if x != 0 else 0).max()
+            if data_type == 'float':
+                max_decimal_places = col_data.dropna().apply(
+                    lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0).max()
+                column_info["Max Decimal Precision"] = max_decimal_places
 
-        if isinstance(col_data.dtype, object):
+        if data_type == 'string':
             column_info["Max String Length"] = col_data.astype(str).map(len).max()
             non_english_chars = any(re.search(r'[^\x00-\x7F]+', str(x)) for x in col_data)
             column_info["Contains Non-English Characters"] = non_english_chars
@@ -279,7 +280,7 @@ def third_phase(df: pd.DataFrame):
             else:
                 column_info["Languages Detected with Confidence"] = [("EN", 1.0)]
 
-        if "date" in str(data_type) or "timestamp" in str(data_type):
+        if "date" in data_type or "timestamp" in data_type:
             col_data = pd.to_datetime(col_data, errors='coerce')
             column_info["Min Date/Time Value"] = col_data.min()
             column_info["Max Date/Time Value"] = col_data.max()
@@ -290,7 +291,7 @@ def third_phase(df: pd.DataFrame):
 
 
 # Get third phase info
-third_phase_info = third_phase(df)
+third_phase_info = third_phase(df, df_info['Custom Data Types'])
 
 # Iterate over the list of dictionaries
 for column_info in third_phase_info:
