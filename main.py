@@ -156,16 +156,16 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
     return info_dict, random_rows_df, df
 
 
-# # Get DataFrame info and random rows
-df_info, random_rows_df, df = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
-
-# Iterate through the info dictionary and print the values
-for key, value in df_info.items():
-    print(f"{key}: {value}")
-
-# Print the random rows DataFrame
-print("\nRandom Rows:")
-print(random_rows_df)
+# # # Get DataFrame info and random rows
+# df_info, random_rows_df, df = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
+#
+# # Iterate through the info dictionary and print the values
+# for key, value in df_info.items():
+#     print(f"{key}: {value}")
+#
+# # Print the random rows DataFrame
+# print("\nRandom Rows:")
+# print(random_rows_df)
 
 
 def second_phase(df: pd.DataFrame, custom_data_types: dict):
@@ -229,14 +229,14 @@ def second_phase(df: pd.DataFrame, custom_data_types: dict):
 
 
 # Get second phase info
-second_phase_info = second_phase(df, df_info['Custom Data Types'])
-
-# Iterate through the info dictionary and print the values
-for key, value in second_phase_info.items():
-    print(f"{key}: {value}")
-
-print()
-print()
+# second_phase_info = second_phase(df, df_info['Custom Data Types'])
+#
+# # Iterate through the info dictionary and print the values
+# for key, value in second_phase_info.items():
+#     print(f"{key}: {value}")
+#
+# print()
+# print()
 
 
 def third_phase(df: pd.DataFrame, custom_data_types: dict):
@@ -279,7 +279,12 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
             if non_english_chars:
                 unique_texts = col_data.dropna().unique().tolist()
                 languages_with_confidence = [detect_language_with_confidence(text) for text in unique_texts]
-                column_info["Languages Detected with Confidence"] = languages_with_confidence
+                # Flatten the list of lists to a single list of tuples
+                languages_with_confidence = [item for sublist in languages_with_confidence for item in sublist]
+
+                # Sort the list of tuples
+                column_info["Languages Detected with Confidence"] = sorted(languages_with_confidence,
+                                                                           key=lambda x: x[1], reverse=True)[:10]
             else:
                 column_info["Languages Detected with Confidence"] = [("EN", 1.0)]
 
@@ -293,22 +298,22 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
     return column_details
 
 
-# Get third phase info
-third_phase_info = third_phase(df, df_info['Custom Data Types'])
-
-# Iterate over the list of dictionaries
-for column_info in third_phase_info:
-    # Print the column name
-    print(f"Column Name: {column_info['Column Name']}")
-
-    # Iterate over the keys and values in the dictionary
-    for key, value in column_info.items():
-        # Skip the column name as we have already printed it
-        if key != 'Column Name':
-            print(f"{key}: {value}")
-
-    # Print a separator for readability
-    print("-" * 50)
+# # Get third phase info
+# third_phase_info = third_phase(df, df_info['Custom Data Types'])
+#
+# # Iterate over the list of dictionaries
+# for column_info in third_phase_info:
+#     # Print the column name
+#     print(f"Column Name: {column_info['Column Name']}")
+#
+#     # Iterate over the keys and values in the dictionary
+#     for key, value in column_info.items():
+#         # Skip the column name as we have already printed it
+#         if key != 'Column Name':
+#             print(f"{key}: {value}")
+#
+#     # Print a separator for readability
+#     print("-" * 50)
 
 
 def plot_histogram(data, ax, title):
@@ -359,17 +364,35 @@ def plot_wordcloud(text, ax):
 # Function to calculate and plot TF-IDF
 def calculate_tfidf(col_data, ax):
     # Clean the data
-    col_data = col_data.apply(lambda x: re.sub(r'\W+', ' ', x.lower()) if isinstance(x, str) else x)
+    col_data = col_data.apply(lambda x: re.sub(r'\W+', ' ', x.lower().strip()) if isinstance(x, str) else x)
     vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
-    tfidf_matrix = vectorizer.fit_transform(col_data)
-    tfidf_scores = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
-    top_features = tfidf_scores.mean().sort_values(ascending=False).head(10)
-    top_features.plot(kind='bar', ax=ax)
-    ax.set_title('Top 10 TF-IDF Features')
-    return top_features.to_dict()
+
+    # Attempt to perform TF-IDF analysis, catch any errors that arise
+    try:
+        # Generate TF-IDF matrix
+        tfidf_matrix = vectorizer.fit_transform(col_data)
+        tfidf_scores = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
+        top_features = tfidf_scores.mean().sort_values(ascending=False).head(10)
+
+        # Plot top features
+        top_features.plot(kind='bar', ax=ax)
+        ax.set_title('Top 10 TF-IDF Features')
+
+        # Return the top features as a dictionary
+        return top_features.to_dict()
+
+    except ValueError as e:
+        # Handle the case where TF-IDF could not be calculated, usually due to empty vocabulary
+        print(f"Error in TF-IDF analysis: {e}")
+        ax.text(0.5, 0.5, "Not enough textual data for TF-IDF analysis",
+                horizontalalignment='center',
+                verticalalignment='center',
+                transform=ax.transAxes)
+        return {}
+
+    # Function to calculate outlier percentage
 
 
-# Function to calculate outlier percentage
 def calculate_outlier_percentage(data):
     q1, q3 = np.percentile(data, [25, 75])
     iqr = q3 - q1
@@ -395,23 +418,23 @@ def fourth_phase(df, custom_data_types):
             # Histogram
             plot_histogram(data, ax, f'Distribution of {col}')
             column_info['histogram'] = get_image_base64(fig)
-
+            plt.close(fig)
             # QQ Plot
             fig, ax = plt.subplots()
             probplot(data, dist="norm", plot=ax)
             ax.set_title(f'QQ Plot of {col}')
             column_info['qq_plot'] = get_image_base64(fig)
-
+            plt.close(fig)
             # Box Plot
             fig, ax = plt.subplots()
             plot_boxplot(data, ax, f'Boxplot of {col}')
             column_info['box_plot'] = get_image_base64(fig)
-
+            plt.close(fig)
             # Violin Plot
             fig, ax = plt.subplots()
             plot_violinplot(data, ax, f'Violin plot of {col}')
             column_info['violin_plot'] = get_image_base64(fig)
-
+            plt.close(fig)
             # Outlier Percentage
             outlier_percentage = calculate_outlier_percentage(data)
             column_info['outlier_percentage'] = outlier_percentage
@@ -422,7 +445,7 @@ def fourth_phase(df, custom_data_types):
             fig, ax = plt.subplots()
             plot_wordcloud(combined_text, ax)
             column_info['wordcloud'] = get_image_base64(fig)
-
+            plt.close(fig)
             # TF-IDF Ranking
             tfidf_scores = calculate_tfidf(data, ax)
             column_info['tfidf'] = tfidf_scores
@@ -432,7 +455,7 @@ def fourth_phase(df, custom_data_types):
             text_lengths = data.apply(len)
             plot_histogram(text_lengths, ax, f'Text Length Distribution for {col}')
             column_info['text_length_histogram'] = get_image_base64(fig)
-
+            plt.close(fig)
         elif dtype == 'date' or dtype == 'timestamp':
             # Histogram with dynamic binning
             fig, ax = plt.subplots()
@@ -440,7 +463,7 @@ def fourth_phase(df, custom_data_types):
             data.dropna().hist(ax=ax, bins=20)
             ax.set_title(f'Distribution of {col}')
             column_info['date_hist'] = get_image_base64(fig)
-
+            plt.close(fig)
         # Save the column info
         column_analysis[col] = column_info
 
@@ -449,27 +472,18 @@ def fourth_phase(df, custom_data_types):
 
 # Set up Jinja2 environment
 # Replace 'your_templates_directory' with the actual path to your templates
-env = Environment(loader=FileSystemLoader('./'))
+env = Environment(loader=FileSystemLoader('.'))
 
 
 # Define a function to generate the HTML report
-def generate_html_report(data_phases, template_name='jinja_tempate.html',
+def generate_html_report(data_phases, template_name='jinja_template.html',
                          output_filename='data_profiling_report.html'):
     """
     Generates an HTML report from the data collected in the data profiling phases.
-
-    :param data_phases: A dictionary containing the data for each phase.
-    :param template_name: The filename of the Jinja2 template.
-    :param output_filename: The filename for the output HTML.
     """
-    # Load the Jinja2 template
     template = env.get_template(template_name)
-
-    # Use the template to render HTML content
     html_content = template.render(data_phases)
-
-    # Define the output path for the HTML file
-    output_filepath = os.path.join('path_to_output_directory', output_filename)
+    output_filepath = os.path.join('./', output_filename)
 
     # Save the rendered HTML to a file
     with open(output_filepath, 'w') as file:
@@ -478,13 +492,21 @@ def generate_html_report(data_phases, template_name='jinja_tempate.html',
     # Return the path to the generated HTML file
     return output_filepath
 
+
+df_info, random_rows_df, df = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
 # Example usage:
 # Assuming 'data_phases' is a dictionary containing all the necessary data and visualizations from the four phases
 data_phases = {
-    'phase1': first_phase('data/input_data.csv', 'prod', 'schema', 'table'),
-    'phase2': second_phase(df, df_info['Custom Data Types']),
-    'phase3': third_phase(df, df_info['Custom Data Types']),
-    'phase4': fourth_phase(df, df_info['Custom Data Types'])
+    'phase1_data': df_info,  # Assuming df_info is a dictionary
+    'phase2_data': second_phase(df, df_info['Custom Data Types']),
+    'phase3_data': third_phase(df, df_info['Custom Data Types']),
+    'phase4_data': fourth_phase(df, df_info['Custom Data Types']),
+    'random_rows': random_rows_df.to_html(classes='random-rows')  # Convert the random rows DataFrame to HTML
 }
-html_report_path = generate_html_report(data_phases)
+
+# Generate the report
+html_report_path = generate_html_report(data_phases, 'jinja_template.html')
 print(f"HTML report generated: {html_report_path}")
+
+# Make sure to close plots to avoid memory issues
+plt.close('all')
