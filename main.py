@@ -19,6 +19,9 @@ from statsmodels.stats.proportion import proportion_confint
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
 import dateutil.parser as dparser
+from jinja2 import Environment, FileSystemLoader
+# from weasyprint import HTML
+import os
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
@@ -154,7 +157,7 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
 
 
 # # Get DataFrame info and random rows
-df_info, random_rows_df, df = first_phase('data/input_data.csv','prod', 'schema', 'table')
+df_info, random_rows_df, df = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
 
 # Iterate through the info dictionary and print the values
 for key, value in df_info.items():
@@ -308,21 +311,27 @@ for column_info in third_phase_info:
     print("-" * 50)
 
 
-# Function to handle statistical analysis and visualization for each column
-# Helper function to get base64 string of plt figure
-def plot_wordcloud(text, ax):
-    try:
-        wordcloud = WordCloud(width=800, height=400).generate(text)
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis('off')
-    except ValueError as e:
-        print(f"Error in wordcloud generation: {e, text}")
+def plot_histogram(data, ax, title):
+    sns.histplot(data, kde=False, ax=ax)
+    ax.set_title(title)
 
 
-def plot_violin(data, ax):
+def plot_boxplot(data, ax, title):
+    sns.boxplot(x=data, ax=ax)
+    ax.set_title(title)
+
+
+def plot_violinplot(data, ax, title):
     sns.violinplot(x=data, ax=ax)
+    ax.set_title(title)
 
 
+def plot_qqplot(data, ax, title):
+    stats.probplot(data, dist="norm", plot=ax)
+    ax.set_title(title)
+
+
+# Function to encode plot as base64 for HTML embedding
 def base64_encode_plot(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png')
@@ -330,64 +339,152 @@ def base64_encode_plot(fig):
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
-def fourth_phase(df):
-    results = {}
+# Function to generate base64 encoded image for embedding in PDF
+def get_image_base64(fig):
+    buf = BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight')
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    buf.close()
+    return image_base64
+
+
+# Function to calculate and plot word cloud
+def plot_wordcloud(text, ax):
+    wordcloud = WordCloud(width=800, height=400).generate(text)
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis('off')
+
+
+# Function to calculate and plot TF-IDF
+def calculate_tfidf(col_data, ax):
+    # Clean the data
+    col_data = col_data.apply(lambda x: re.sub(r'\W+', ' ', x.lower()) if isinstance(x, str) else x)
+    vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
+    tfidf_matrix = vectorizer.fit_transform(col_data)
+    tfidf_scores = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
+    top_features = tfidf_scores.mean().sort_values(ascending=False).head(10)
+    top_features.plot(kind='bar', ax=ax)
+    ax.set_title('Top 10 TF-IDF Features')
+    return top_features.to_dict()
+
+
+# Function to calculate outlier percentage
+def calculate_outlier_percentage(data):
+    q1, q3 = np.percentile(data, [25, 75])
+    iqr = q3 - q1
+    lower_bound = q1 - (1.5 * iqr)
+    upper_bound = q3 + (1.5 * iqr)
+    outliers = data[(data < lower_bound) | (data > upper_bound)]
+    outlier_percentage = len(outliers) / len(data) * 100
+    return outlier_percentage
+
+
+# Fourth phase function
+def fourth_phase(df, custom_data_types):
+    column_analysis = {}
+
     for col in df.columns:
-        col_data = df[col].dropna()
-        fig, axs = plt.subplots(2 if df[col].dtype == object else 3, 1, figsize=(10, 10))
+        data = df[col].dropna()
+        dtype = custom_data_types[col]
 
-        if np.issubdtype(df[col].dtype, np.number):
-            # Descriptive statistics
-            desc_stats = col_data.describe()
-            results[f"{col}_desc_stats"] = desc_stats.to_dict()
+        column_info = {}
+        fig, ax = plt.subplots()
 
+        if dtype == 'integer' or dtype == 'float':
             # Histogram
-            sns.histplot(col_data, kde=True, ax=axs[0])
-            axs[0].set_title(f'Distribution of {col}')
+            plot_histogram(data, ax, f'Distribution of {col}')
+            column_info['histogram'] = get_image_base64(fig)
 
-            # Shapiro-Wilk test
-            shapiro_test = shapiro(col_data)
-            results[f"{col}_shapiro_wilk"] = {'Statistic': shapiro_test[0], 'p-value': shapiro_test[1]}
+            # QQ Plot
+            fig, ax = plt.subplots()
+            probplot(data, dist="norm", plot=ax)
+            ax.set_title(f'QQ Plot of {col}')
+            column_info['qq_plot'] = get_image_base64(fig)
 
-            # Violin plot
-            plot_violin(col_data, axs[1])
-            axs[1].set_title(f'Violin plot of {col}')
+            # Box Plot
+            fig, ax = plt.subplots()
+            plot_boxplot(data, ax, f'Boxplot of {col}')
+            column_info['box_plot'] = get_image_base64(fig)
 
-            # Boxplot
-            sns.boxplot(x=col_data, ax=axs[2])
-            axs[2].set_title(f'Boxplot of {col}')
+            # Violin Plot
+            fig, ax = plt.subplots()
+            plot_violinplot(data, ax, f'Violin plot of {col}')
+            column_info['violin_plot'] = get_image_base64(fig)
 
-        elif df[col].dtype == object:
-            if identify_column_type(df[col]) not in ['date column', 'timestamp column']:
-                # Wordcloud
-                combined_text = " ".join(col_data)
+            # Outlier Percentage
+            outlier_percentage = calculate_outlier_percentage(data)
+            column_info['outlier_percentage'] = outlier_percentage
 
-                plot_wordcloud(combined_text, axs[0])
+        elif dtype == 'string':
+            # Word Cloud
+            combined_text = ' '.join(data.astype(str))
+            fig, ax = plt.subplots()
+            plot_wordcloud(combined_text, ax)
+            column_info['wordcloud'] = get_image_base64(fig)
 
-                # Frequency plot
-                frequency = col_data.value_counts().head(10)
-                frequency.plot(kind='bar', ax=axs[1])
-                axs[1].set_title(f'Frequency of top categories in {col}')
+            # TF-IDF Ranking
+            tfidf_scores = calculate_tfidf(data, ax)
+            column_info['tfidf'] = tfidf_scores
 
-                # TF-IDF analysis
-                # Clean the data
-                col_data = col_data.apply(lambda x: re.sub(r'\W+', ' ', x.lower()) if isinstance(x, str) else x)
-                try:
-                    # Now you can perform fit_transform on cleaned data
-                    vectorizer = TfidfVectorizer(stop_words='english')
-                    tfidf_matrix = vectorizer.fit_transform(col_data)
-                    tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
-                    results[f"{col}_tfidf"] = tfidf_df.mean().sort_values(ascending=False).head(10).to_dict()
-                except ValueError as e:
-                    print(f"Error in TF-IDF analysis: {e, col}")
-            else:
-                pass
+            # Histogram of text length
+            fig, ax = plt.subplots()
+            text_lengths = data.apply(len)
+            plot_histogram(text_lengths, ax, f'Text Length Distribution for {col}')
+            column_info['text_length_histogram'] = get_image_base64(fig)
 
-        # Convert plots to base64 for HTML embedding
-        results[f"{col}_plots_base64"] = base64_encode_plot(fig)
+        elif dtype == 'date' or dtype == 'timestamp':
+            # Histogram with dynamic binning
+            fig, ax = plt.subplots()
+            data = pd.to_datetime(data, errors='coerce')
+            data.dropna().hist(ax=ax, bins=20)
+            ax.set_title(f'Distribution of {col}')
+            column_info['date_hist'] = get_image_base64(fig)
 
-    return results
+        # Save the column info
+        column_analysis[col] = column_info
+
+    return column_analysis
 
 
-fourth_phase_data = fourth_phase(df)
-# print(fourth_phase_data)
+# Set up Jinja2 environment
+# Replace 'your_templates_directory' with the actual path to your templates
+env = Environment(loader=FileSystemLoader('./'))
+
+
+# Define a function to generate the HTML report
+def generate_html_report(data_phases, template_name='jinja_tempate.html',
+                         output_filename='data_profiling_report.html'):
+    """
+    Generates an HTML report from the data collected in the data profiling phases.
+
+    :param data_phases: A dictionary containing the data for each phase.
+    :param template_name: The filename of the Jinja2 template.
+    :param output_filename: The filename for the output HTML.
+    """
+    # Load the Jinja2 template
+    template = env.get_template(template_name)
+
+    # Use the template to render HTML content
+    html_content = template.render(data_phases)
+
+    # Define the output path for the HTML file
+    output_filepath = os.path.join('path_to_output_directory', output_filename)
+
+    # Save the rendered HTML to a file
+    with open(output_filepath, 'w') as file:
+        file.write(html_content)
+
+    # Return the path to the generated HTML file
+    return output_filepath
+
+# Example usage:
+# Assuming 'data_phases' is a dictionary containing all the necessary data and visualizations from the four phases
+data_phases = {
+    'phase1': first_phase('data/input_data.csv', 'prod', 'schema', 'table'),
+    'phase2': second_phase(df, df_info['Custom Data Types']),
+    'phase3': third_phase(df, df_info['Custom Data Types']),
+    'phase4': fourth_phase(df, df_info['Custom Data Types'])
+}
+html_report_path = generate_html_report(data_phases)
+print(f"HTML report generated: {html_report_path}")
