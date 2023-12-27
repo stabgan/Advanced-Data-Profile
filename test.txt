@@ -1,0 +1,1 @@
+summaryaccountcode, summaryaccountcodename, accounttitlecode, accounttitlename, accounttype, functionalarea, accountcodetable, companycode, legacyflag, creationdate, createdby, updatedate, updatedby
