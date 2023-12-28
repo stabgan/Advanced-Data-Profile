@@ -27,6 +27,7 @@ import json
 import plotly
 import plotly.graph_objs as go
 import io
+
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
 pd.set_option('display.max_columns', None)
@@ -140,7 +141,9 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
     column_names = df.columns.tolist()
     has_duplicates = df.duplicated().any()
     n_rows = min(10, df.shape[0])
-    random_rows_df = df.sample(n=n_rows).transpose()
+    random_rows_df = df.sample(n=n_rows)
+    # Transpose the DataFrame
+    random_rows_transposed = random_rows_df.T
     memory_usage = df.memory_usage(deep=True).sum() / 1024
     data_type_list = ", </br>".join([key + " - " + value for key, value in custom_data_types.items()])
     info_dict = {
@@ -159,7 +162,7 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
         'Total Row Count': df.shape[0],
         'Total Column Count': df.shape[1]
     }
-    return info_dict, random_rows_df, df, custom_data_types
+    return info_dict, random_rows_transposed, df, custom_data_types
 
 
 # # # Get DataFrame info and random rows
@@ -485,7 +488,7 @@ def fourth_phase(df, custom_data_types):
             else:
                 print(f"No data to generate word cloud for column: {col}")
 
-            #tf idf scores
+            # tf idf scores
             tfidf_scores = calculate_tfidf(data)
             if tfidf_scores:
                 # We convert the dictionary to a DataFrame for Plotly
@@ -538,15 +541,17 @@ def generate_html_report(data_phases, template_name='jinja_template.html',
     return output_filepath
 
 
-df_info, random_rows_df, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
+df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
 # Example usage:
+# print(random_rows)
+# print(random_rows.to_html(index=False))
 # Assuming 'data_phases' is a dictionary containing all the necessary data and visualizations from the four phases
 data_phases = {
     'phase1_data': df_info,  # Assuming df_info is a dictionary
     'phase2_data': second_phase(df, custom_data_types),
     'phase3_data': third_phase(df, custom_data_types),
     'phase4_data': fourth_phase(df, custom_data_types),
-    'random_rows': random_rows_df.to_html(classes='random-rows', index=False, border=0)
+    'random_rows': random_rows.to_html()
 }
 
 # Generate the report
