@@ -373,8 +373,13 @@ def get_image_base64(fig):
 
 
 # Function to calculate and plot word cloud
+# Function to calculate and plot word cloud
 def plot_wordcloud(text):
-    # Generate a word cloud image
+    # Check if the text is empty
+    if not text.strip():
+        print("No data to generate word cloud for.")
+        return None
+    # If text is not empty, proceed with generating a word cloud image
     wordcloud = WordCloud(background_color='white').generate(text)
 
     # Save the image to a BytesIO object
@@ -480,7 +485,11 @@ def fourth_phase(df, custom_data_types):
             # Word Cloud
             if data.any():  # Check if there's any data
                 combined_text = ' '.join(data.astype(str))
-                wordcloud_img = plot_wordcloud(combined_text)
+                try:
+                    wordcloud_img = plot_wordcloud(combined_text)
+                except ValueError as e:
+                    print(f"Caught an error when generating word cloud: {e}")
+                    wordcloud_img = None  # or set to a default image
                 column_info['wordcloud'] = wordcloud_img
             else:
                 print(f"No data to generate word cloud for column: {col}")
