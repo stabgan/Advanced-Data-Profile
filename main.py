@@ -1,32 +1,27 @@
+import base64
+import json
+# from weasyprint import HTML
 import os
 import re
-import random
-from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-import base64
 from io import BytesIO
+
 import dateparser
+import dateutil.parser as dparser
 import fasttext
 import numpy as np
 import pandas as pd
+import plotly
+import plotly.express as px
+import plotly.graph_objs as go
 import psutil
 import seaborn as sns
+from jinja2 import Environment, FileSystemLoader
 from matplotlib import pyplot as plt
 from scipy import stats
-from scipy.stats import entropy, t, chi2, probplot, shapiro, norm, ttest_1samp, chisquare
-from statsmodels.stats.proportion import proportion_confint
+from scipy.stats import entropy, skew
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
-import dateutil.parser as dparser
-from jinja2 import Environment, FileSystemLoader
-# from weasyprint import HTML
-import os
-import plotly.express as px
-import json
-import plotly
-import plotly.graph_objs as go
-import io
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
@@ -81,20 +76,18 @@ def calculate_entropy(column: pd.Series) -> float:
     value_counts = column.value_counts()
     probabilities = value_counts / len(column)
     return entropy(probabilities)
-
-
 def categorical_confidence(col_data: pd.Series, total_rows: int) -> float:
     unique_values = col_data.nunique()
     unique_ratio = unique_values / total_rows
     if unique_values <= 1:  # Single or no value
         return 0.0
-    elif col_data.dtype in ['object', 'category'] or unique_ratio < 0.1:
+    elif  unique_ratio < 0.1:
+        col_data = col_data.apply(lambda x: f"{x:.2f}" if isinstance(x, float) else str(x))
         ent = calculate_entropy(col_data)
         # High entropy -> lower confidence, and vice versa
         confidence = max(0, 100 - ent * 10)
         return round(confidence, 2)
     return 0.0
-
 
 def is_date_or_timestamp(s):
     if not isinstance(s, str):
@@ -124,7 +117,7 @@ def identify_column_type(col):
 
 
 def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
-    date_time = datetime.now().strftime("%m-%d-%Y | %I-%M %p")
+    date_time = datetime.now().strftime("%m/%d/%Y %I:%M %p")
     data_volume = os.path.getsize(file_path) / 1024
     total_ram = psutil.virtual_memory().total / (1024 ** 3)
     available_ram = psutil.virtual_memory().available / (1024 ** 3)
@@ -140,8 +133,9 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
     shape = df.shape
     column_names = df.columns.tolist()
     has_duplicates = df.duplicated().any()
-    n_rows = min(10, df.shape[0])
+    n_rows = min(100, df.shape[0])
     random_rows_df = df.sample(n=n_rows)
+
     # Transpose the DataFrame
     # random_rows_transposed = random_rows_df.T
     memory_usage = df.memory_usage(deep=True).sum() / 1024
@@ -150,12 +144,11 @@ def first_phase(file_path: str, env: str, schema_name: str, table_name: str):
         'Schema Name': schema_name,
         'Table Name': table_name,
         'Date/Time': date_time,
-        'Shape': shape,
         'Has Duplicates': 'Yes' if has_duplicates else 'No',
-        'Memory Usage': f'{memory_usage:.1f} KB',
-        'Data Volume': f'{data_volume:.1f} KB',
-        'Total RAM': f'{total_ram:.1f} GB',
-        'Available RAM': f'{available_ram:.1f} GB',
+        'Memory Usage in server': f'{memory_usage:.1f} KB',
+        'Data volume': f'{data_volume:.1f} KB',
+        'Total RAM in server': f'{total_ram:.1f} GB',
+        'Available RAM in server': f'{available_ram:.1f} GB',
         'Total Row Count': df.shape[0],
         'Total Column Count': df.shape[1]
     }
@@ -192,7 +185,7 @@ def second_phase(df, custom_data_types):
     for col in df.columns:
         col_data = df[col].dropna()
         data_type = custom_data_types[col]
-
+        categorical_info[col] = categorical_confidence(col_data, total_rows)
         if data_type == 'integer':
             int_columns.append(col)
         elif data_type == 'float':
@@ -206,8 +199,8 @@ def second_phase(df, custom_data_types):
             string_columns.append(col)
             max_length_in_col = col_data.astype(str).map(len).max()
             max_string_length = max(max_string_length, max_length_in_col)
-            if categorical_confidence(col_data, total_rows) > 50:
-                categorical_info[col] = categorical_confidence(col_data, total_rows)
+            # if categorical_confidence(col_data, total_rows) > 50:
+            #     categorical_info[col] = categorical_confidence(col_data, total_rows)
         elif data_type == 'date':
             date_columns.append(col)
         elif data_type == 'timestamp':
@@ -228,21 +221,15 @@ def second_phase(df, custom_data_types):
         'Date Column Count': len(date_columns),
         'Timestamp Column Count': len(timestamp_columns),
         'Double Column Count': len(double_columns),
-        'Categorical Columns and Confidence Levels': categorical_info,
         'Maximum String Length': max_string_length,
         'Maximum Decimal Places': max_decimal_places,
         'Total Null Record Count': total_null_count,
         'Total Not Null Record Count': total_not_null_count,
-        'Total number of 0% Record Count': total_zero_percent_count,
-        'Total number of 100% Record Count': total_hundred_percent_count,
-        'Int Columns': int_columns,
-        'Float Columns': float_columns,
-        'String Columns': string_columns,
-        'Date Columns': date_columns,
-        'Timestamp Columns': timestamp_columns,
+        'Count of columns with no data': total_zero_percent_count,
+        'Count of Columns with 100% data': total_hundred_percent_count
     }
 
-    return info_dict
+    return info_dict, categorical_info
 
 
 # Get second phase info
@@ -436,7 +423,7 @@ def fourth_phase(df, custom_data_types):
     column_analysis = {}
 
     # Check if any data is being processed
-    print(f"Processing {len(df.columns)} columns...")
+    # print(f"Processing {len(df.columns)} columns...")
 
     for col in df.columns:
         data = df[col].dropna()
@@ -536,18 +523,30 @@ def generate_html_report(data_phases, template_name='jinja_template.html',
     Generates an HTML report from the data collected in the data profiling phases.
     """
     template = env.get_template(template_name)
-    html_content = template.render(data_phases)
+    html_content = template.render(data_phases, get_confidence_color=get_confidence_color)
     output_filepath = os.path.join('./', output_filename)
 
     # Save the rendered HTML to a file
-    with open(output_filepath, 'w') as file:
+    with open(output_filepath, 'w', encoding='utf-8') as file:
         file.write(html_content)
 
     # Return the path to the generated HTML file
     return output_filepath
 
+def get_confidence_color(confidence):
+    # Assuming confidence is a percentage
+    if confidence >= 85:
+        return '#dc3545'  # Red for high confidence
+    elif confidence >= 70:
+        return '#007bff'  # Blue for medium confidence
+    else:
+        return '#28a745'  # Green for low confidence
 
-df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'schema', 'table')
+df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'big_schema_name',
+                                                          'ultra_huge_table0677_name')
+summary, categorical_info = second_phase(df, custom_data_types)
+# print(categorical_info)
+# random_rows = random_rows.fillna('<i>null/blank</i>')
 # Example usage:
 # print(random_rows)
 # print(random_rows.to_html)
@@ -555,10 +554,11 @@ df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv',
 data_phases = {
     'phase1_data': df_info,
     'custom_data_types': custom_data_types,
-    'phase2_data': second_phase(df, custom_data_types),
+    'phase2_data': summary,
+    'categorical_info': categorical_info,
     'phase3_data': third_phase(df, custom_data_types),
     'phase4_data': fourth_phase(df, custom_data_types),
-    'random_rows': random_rows.to_html()
+    'random_rows': random_rows
 }
 
 # Generate the report
