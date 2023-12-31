@@ -578,7 +578,7 @@ summary, categorical_info = second_phase(df, custom_data_types)
 phase3 = third_phase(df, custom_data_types)
 # print(phase3)
 phase4 = fourth_phase(df, custom_data_types)
-# print(categorical_info)
+# print(phase4['summaryaccountcode'])
 # random_rows = random_rows.fillna('<i>null/blank</i>')
 # Example usage:
 # print(random_rows)
