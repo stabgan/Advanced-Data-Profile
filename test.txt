@@ -1,1 +1,50 @@
-summaryaccountcode, summaryaccountcodename, accounttitlecode, accounttitlename, accounttype, functionalarea, accountcodetable, companycode, legacyflag, creationdate, createdby, updatedate, updatedby
+<!-- ...previous code... -->
+<tbody class="align-middle text-center">
+    {% for column_data in phase3_data %}
+    <tr>
+        <!-- ...other cells... -->
+        <td class="align-middle text-center" style="position: relative;">
+            {% set null_percentage = column_data.get('Percentage of NULL Values', 0) %}
+            <div style="background-color: red; width: {{ null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1;"></div>
+            <span style="{% if null_percentage > 50 %}color: white;{% endif %}">{{ null_percentage }}%</span>
+        </td>
+        <td class="align-middle text-center" style="position: relative;">
+            {% set not_null_percentage = column_data.get('Percentage of NOT NULL Values', 0) %}
+            <div style="background-color: green; width: {{ not_null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1;"></div>
+            <span style="{% if not_null_percentage > 50 %}color: white;{% endif %}">{{ not_null_percentage }}%</span>
+        </td>
+        <!-- ...other cells... -->
+        <td class="align-middle text-center">
+            {% if column_data.get('Contains Non-English Characters', False) %}
+                <span class="badge bg-danger">Yes</span>
+            {% else %}
+                No
+            {% endif %}
+        </td>
+        <td class="align-middle text-center">
+            {% if column_data.get('Uniqueness Index (unique/total)', 0) == 1 %}
+                <span class="badge bg-primary">Unique</span>
+            {% else %}
+                {{ column_data.get('Uniqueness Index (unique/total)', '') }}
+            {% endif %}
+        </td>
+        <!-- ...other cells... -->
+        <td class="align-middle text-center">
+            {% if column_data.get('NULL Record Count', 0) == 0 %}
+                <span class="badge bg-success">{{ column_data.get('NOT NULL Record Count', '') }}</span>
+            {% else %}
+                {{ column_data.get('NOT NULL Record Count', '') }}
+            {% endif %}
+        </td>
+        <td class="align-middle text-center">
+            {% if column_data.get('NULL Record Count', 0) == 0 %}
+                <span class="badge bg-success">{{ column_data.get('NULL Record Count', '') }}</span>
+            {% else %}
+                {{ column_data.get('NULL Record Count', '') }}
+            {% endif %}
+        </td>
+        <!-- ...other cells... -->
+    </tr>
+    {% endfor %}
+</tbody>
+<!-- ...following code... -->
