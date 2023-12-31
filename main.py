@@ -23,7 +23,9 @@ from scipy.stats import entropy, skew
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
 import unicodedata
-
+import json
+from plotly import offline as py_offline
+from plotly.graph_objs import Histogram, Box, Scatter, Figure
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
 pd.set_option('display.max_columns', None)
@@ -449,94 +451,120 @@ def round_if_float(x):
 def fourth_phase(df, custom_data_types):
     column_analysis = {}
 
-    # Check if any data is being processed
-    # print(f"Processing {len(df.columns)} columns...")
-
     for col in df.columns:
         data = df[col].dropna()
         dtype = custom_data_types[col]
 
         column_info = {'description': {k: round_if_float(v) for k, v in data.describe().to_dict().items()}}
-        # print(column_info)
-        # print(f"Processing column: {col}, dtype: {dtype}")
-        # Append pandas describe() output to the column_info dictionary
+
         if dtype == 'integer' or dtype == 'float':
-            # Histogram using Plotly
-            fig = px.histogram(data, title=f'Distribution of {col}')
-            column_info['histogram'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+            # Basic statistical analysis
+            column_info['skewness'] = round_if_float(data.skew())
+            column_info['kurtosis'] = round_if_float(data.kurtosis())
+            column_info['outlier_percentage'] = round_if_float(calculate_outlier_percentage(data))
 
-            # Calculate QQ plot data
-            qq_fig_data = stats.probplot(data, dist="norm")
-            qq_fig = px.scatter(x=qq_fig_data[0][0], y=qq_fig_data[0][1],
-                                labels={'x': 'Theoretical Quantiles', 'y': 'Ordered Values'})
-            # Calculate the end points for the theoretical normal distribution line
-            min_theoretical = np.min(qq_fig_data[0][0])
-            max_theoretical = np.max(qq_fig_data[0][0])
-            min_ordered = min_theoretical * np.std(data) + np.mean(data)
-            max_ordered = max_theoretical * np.std(data) + np.mean(data)
+            # Normalization and transformation (if needed)
+            # Assuming a simple normalization here; can be expanded as needed
+            normalized_data = (data - data.mean()) / data.std()
+            column_info['normalized'] = normalized_data.tolist()
 
-            # Add the reference line
-            qq_fig.add_trace(go.Scatter(x=[min_theoretical, max_theoretical],
-                                        y=[min_ordered, max_ordered],
-                                        mode='lines', name='Normal Distribution'))
-            qq_fig.update_layout(title=f'QQ Plot of {col}')
-            column_info['qq_plot'] = json.dumps(qq_fig, cls=plotly.utils.PlotlyJSONEncoder)
+            # Outlier detection
+            z_scores = np.abs(stats.zscore(data))
+            outliers = data[z_scores > 3].tolist()
+            column_info['outliers'] = outliers
 
-            # Box Plot using Plotly
-            fig = px.box(data, title=f'Boxplot of {col}')
-            column_info['box_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+            # Preparing data for histograms, box plots, etc.
+            column_info['histogram_data'] = data.tolist()
+            column_info['boxplot_data'] = data.tolist()
 
-            # Violin Plot using Plotly
-            fig = px.violin(data, title=f'Violin plot of {col}')
-            column_info['violin_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+            # Q-Q plot data
+            qq_plot_data = stats.probplot(data, dist="norm")
+            column_info['qq_plot'] = {'x': [val[0] for val in qq_plot_data[0]], 'y': [val[1] for val in qq_plot_data[0]]}
 
-            # Outlier Percentage
-            outlier_percentage = calculate_outlier_percentage(data)
-            fig = px.pie(names=['Outliers', 'Non-Outliers'],
-                         values=[outlier_percentage, 100 - outlier_percentage],
-                         title=f'Outlier Percentage for {col}')
-            column_info['outlier_pie'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-        elif dtype == 'string':
-            # Word Cloud
-            if data.any():  # Check if there's any data
-                combined_text = ' '.join(data.astype(str))
-                try:
-                    wordcloud_img = plot_wordcloud(combined_text)
-                except ValueError as e:
-                    print(f"Caught an error when generating word cloud: {e}")
-                    wordcloud_img = None  # or set to a default image
-                column_info['wordcloud'] = wordcloud_img
+            # Violin plot data (using normalized data)
+            column_info['violin_plot'] = normalized_data.tolist()
+
+            # Cumulative frequency plot data
+            sorted_data = np.sort(data)
+            cum_freq = np.arange(1, len(sorted_data)+1) / len(sorted_data)
+            column_info['cumulative_freq'] = {'x': sorted_data.tolist(), 'y': cum_freq.tolist()}
+
+            # Plotly figures
+            # Histogram
+            fig_hist = Figure(data=[Histogram(x=data)])
+            column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Box Plot
+            fig_box = Figure(data=[Box(y=data)])
+            column_info['boxplot'] = json.dumps(fig_box, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Q-Q Plot
+            # Q-Q plot data
+            qq_plot_data = stats.probplot(data, dist="norm")
+
+            # Check if qq_plot_data has the expected structure
+            if len(qq_plot_data) == 2 and all(isinstance(i, np.ndarray) for i in qq_plot_data):
+                qq_x, qq_y = zip(*[(val[0], val[1]) for val in qq_plot_data[0]])
+                column_info['qq_plot'] = {'x': qq_x, 'y': qq_y}
             else:
-                print(f"No data to generate word cloud for column: {col}")
+                # Handle unexpected qq_plot_data format
+                column_info['qq_plot'] = {'x': [], 'y': []}
+                # You might want to log a warning or error here
 
-            # tf idf scores
-            tfidf_scores = calculate_tfidf(data)
-            if tfidf_scores:
-                # We convert the dictionary to a DataFrame for Plotly
-                tfidf_df = pd.DataFrame(list(tfidf_scores.items()), columns=['feature', 'score'])
-                fig = px.bar(tfidf_df, x='feature', y='score', title=f'TF-IDF Scores for {col}')
-                column_info['tfidf_bar'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-            else:
-                print(f"No TF-IDF scores to plot for {col}")
+            # Violin Plot
+            fig_violin = Figure(data=[Box(y=normalized_data, boxpoints='all', jitter=0.5, pointpos=-1.8)])
+            column_info['violin_plot'] = json.dumps(fig_violin, cls=plotly.utils.PlotlyJSONEncoder)
 
-            # Histogram of text length
-            text_lengths = data.apply(len)
-            fig = px.histogram(text_lengths, title=f'Text Length Distribution for {col}')
-            column_info['text_length_histogram'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-
-        elif dtype == 'date' or dtype == 'timestamp':
-            # Check if there's any data after conversion to datetime
-            data = pd.to_datetime(data, errors='coerce').dropna()
-            if not data.empty:
-                fig = px.histogram(data, title=f'Distribution of {col}')
-                column_info['date_hist'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-            else:
-                print(f"No valid date data for column: {col}")
+            # Cumulative Frequency Plot
+            fig_cum_freq = Figure(data=[Scatter(x=sorted_data, y=cum_freq)])
+            column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
 
         column_analysis[col] = column_info
 
-    print(f"Finished processing columns.")
     return column_analysis
+
+
+    #     elif dtype == 'string':
+    #         # Word Cloud
+    #         if data.any():  # Check if there's any data
+    #             combined_text = ' '.join(data.astype(str))
+    #             try:
+    #                 wordcloud_img = plot_wordcloud(combined_text)
+    #             except ValueError as e:
+    #                 print(f"Caught an error when generating word cloud: {e}")
+    #                 wordcloud_img = None  # or set to a default image
+    #             column_info['wordcloud'] = wordcloud_img
+    #         else:
+    #             print(f"No data to generate word cloud for column: {col}")
+    #
+    #         # tf idf scores
+    #         tfidf_scores = calculate_tfidf(data)
+    #         if tfidf_scores:
+    #             # We convert the dictionary to a DataFrame for Plotly
+    #             tfidf_df = pd.DataFrame(list(tfidf_scores.items()), columns=['feature', 'score'])
+    #             fig = px.bar(tfidf_df, x='feature', y='score', title=f'TF-IDF Scores for {col}')
+    #             column_info['tfidf_bar'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    #         else:
+    #             print(f"No TF-IDF scores to plot for {col}")
+    #
+    #         # Histogram of text length
+    #         text_lengths = data.apply(len)
+    #         fig = px.histogram(text_lengths, title=f'Text Length Distribution for {col}')
+    #         column_info['text_length_histogram'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    #
+    #     elif dtype == 'date' or dtype == 'timestamp':
+    #         # Check if there's any data after conversion to datetime
+    #         data = pd.to_datetime(data, errors='coerce').dropna()
+    #         if not data.empty:
+    #             fig = px.histogram(data, title=f'Distribution of {col}')
+    #             column_info['date_hist'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    #         else:
+    #             print(f"No valid date data for column: {col}")
+    #
+    #     column_analysis[col] = column_info
+    #
+    # print(f"Finished processing columns.")
+    # return column_analysis
 
 
 # Set up Jinja2 environment
@@ -571,6 +599,15 @@ def get_confidence_color(confidence):
     else:
         return '#28a745'  # Green for low confidence
 
+def convert_to_serializable(val):
+    """Convert numpy types to native Python types for JSON serialization."""
+    if isinstance(val, np.generic):
+        return val.item()  # Updated from np.asscalar(val) to val.item()
+    elif isinstance(val, dict):
+        return {k: convert_to_serializable(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [convert_to_serializable(v) for v in val]
+    return val
 
 df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'big_schema_name',
                                                           'ultra_huge_table0677_name')
@@ -578,6 +615,8 @@ summary, categorical_info = second_phase(df, custom_data_types)
 phase3 = third_phase(df, custom_data_types)
 # print(phase3)
 phase4 = fourth_phase(df, custom_data_types)
+# print(phase4)
+phase4_serializable = {col: convert_to_serializable(data) for col, data in phase4.items()}
 # print(phase4['summaryaccountcode'])
 # random_rows = random_rows.fillna('<i>null/blank</i>')
 # Example usage:
@@ -590,7 +629,7 @@ data_phases = {
     'phase2_data': summary,
     'categorical_info': categorical_info,
     'phase3_data': phase3,
-    'phase4_data': phase4,
+    'phase4_data': phase4_serializable,
     'random_rows': random_rows
 }
 
