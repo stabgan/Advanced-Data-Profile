@@ -440,7 +440,10 @@ def calculate_outlier_percentage(data):
     outliers = data[(data < lower_bound) | (data > upper_bound)]
     outlier_percentage = len(outliers) / len(data) * 100
     return outlier_percentage
-
+def round_if_float(x):
+    if isinstance(x, float):
+        return round(x, 2)
+    return x
 
 # Fourth phase function
 def fourth_phase(df, custom_data_types):
@@ -453,7 +456,8 @@ def fourth_phase(df, custom_data_types):
         data = df[col].dropna()
         dtype = custom_data_types[col]
 
-        column_info = {'description': data.describe().to_dict()}
+        column_info = {'description': {k: round_if_float(v) for k, v in data.describe().to_dict().items()}}
+        # print(column_info)
         # print(f"Processing column: {col}, dtype: {dtype}")
         # Append pandas describe() output to the column_info dictionary
         if dtype == 'integer' or dtype == 'float':
