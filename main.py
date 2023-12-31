@@ -64,7 +64,8 @@ def contains_non_english_characters(col_data: pd.Series) -> bool:
 
 def detect_language_with_confidence(text: str) -> list:
     # Check for non-Latin characters using unicodedata
-    if any(unicodedata.category(char).startswith('L') and not unicodedata.name(char).startswith('LATIN') for char in text):
+    if any(unicodedata.category(char).startswith('L') and not unicodedata.name(char).startswith('LATIN') for char in
+           text):
         # Clean the text data
         cleaned_text = re.sub(r'\W+', ' ', text)
         try:
@@ -285,7 +286,7 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
             "NOT NULL Record Count": non_null_count,
             "Percentage of NOT NULL Values": non_null_count / total_count * 100,
             "Number of Distinct Values": unique_values,
-            "Uniqueness Index (unique_values / total_count)": unique_values / total_count,
+            "Uniqueness Index (unique/total)": unique_values / total_count,
             "Top 10 Values": top_10_values
         }
 
@@ -452,9 +453,9 @@ def fourth_phase(df, custom_data_types):
         data = df[col].dropna()
         dtype = custom_data_types[col]
 
-        column_info = {}
+        column_info = {'description': data.describe().to_dict()}
         # print(f"Processing column: {col}, dtype: {dtype}")
-
+        # Append pandas describe() output to the column_info dictionary
         if dtype == 'integer' or dtype == 'float':
             # Histogram using Plotly
             fig = px.histogram(data, title=f'Distribution of {col}')
