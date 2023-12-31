@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from io import BytesIO
-
+import pycountry
 import dateparser
 import dateutil.parser as dparser
 import fasttext
@@ -22,6 +22,7 @@ from scipy import stats
 from scipy.stats import entropy, skew
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
+import unicodedata
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
@@ -53,41 +54,61 @@ def custom_data_type(col):
     return 'string'
 
 
-def detect_language_with_confidence(text):
-    """
-    Detect the language of the given text using FastText.
-    :param text: Text to detect language for.
-    :return: List of tuples with language code and confidence.
-    """
-    # Clean the text data
-    cleaned_text = re.sub(r'\W+', ' ', text)
+def contains_non_english_characters(col_data: pd.Series) -> bool:
+    for item in col_data.dropna().astype(str):
+        for char in item:
+            if unicodedata.category(char).startswith('L') and (unicodedata.name(char).startswith('LATIN') is False):
+                return True
+    return False
 
-    try:
-        # Predict languages with their probabilities
-        predictions = ft_model.predict(cleaned_text, k=1)
-        languages = predictions[0]
-        probabilities = predictions[1]
-        return [(lang.replace('__label__', ''), round(prob, 2)) for lang, prob in zip(languages, probabilities)]
-    except Exception as e:
-        return [('unknown', 0.0)]
+
+def detect_language_with_confidence(text: str) -> list:
+    # Check for non-Latin characters using unicodedata
+    if any(unicodedata.category(char).startswith('L') and not unicodedata.name(char).startswith('LATIN') for char in text):
+        # Clean the text data
+        cleaned_text = re.sub(r'\W+', ' ', text)
+        try:
+            # Predict languages with their probabilities
+            predictions = ft_model.predict(cleaned_text, k=1)
+            languages = predictions[0]
+            probabilities = predictions[1]
+            full_language_names = []
+            for lang_code, prob in zip(languages, probabilities):
+                lang_code = lang_code.replace('__label__', '')
+                # Get the full language name from pycountry
+                try:
+                    language = pycountry.languages.get(alpha_2=lang_code)
+                    full_language_names.append((language.name, round(prob, 2)))
+                except AttributeError:
+                    # If the language code is not found in pycountry, return the code
+                    full_language_names.append((lang_code, round(prob, 2)))
+            return full_language_names
+        except Exception as e:
+            return [('unknown', 0.0)]
+    else:
+        # If text contains only Latin characters, assume it's English or another Latin-based language
+        return [('English', 1.0)]
 
 
 def calculate_entropy(column: pd.Series) -> float:
     value_counts = column.value_counts()
     probabilities = value_counts / len(column)
     return entropy(probabilities)
+
+
 def categorical_confidence(col_data: pd.Series, total_rows: int) -> float:
     unique_values = col_data.nunique()
     unique_ratio = unique_values / total_rows
     if unique_values <= 1:  # Single or no value
         return 0.0
-    elif  unique_ratio < 0.1:
+    elif unique_ratio < 0.1:
         col_data = col_data.apply(lambda x: f"{x:.2f}" if isinstance(x, float) else str(x))
         ent = calculate_entropy(col_data)
         # High entropy -> lower confidence, and vice versa
         confidence = max(0, 100 - ent * 10)
         return round(confidence, 2)
     return 0.0
+
 
 def is_date_or_timestamp(s):
     if not isinstance(s, str):
@@ -212,9 +233,10 @@ def second_phase(df, custom_data_types):
 
     total_null_count = df.isnull().sum().sum()
     total_not_null_count = df.notnull().sum().sum()
+    # print(custom_data_types)
 
     info_dict = {
-        'Total Data Type Count': len(custom_data_types),
+        'Total Data Type Count': len(set(custom_data_types.values())),
         'Int Column Count': len(int_columns),
         'Float Column Count': len(float_columns),
         'String Column Count': len(string_columns),
@@ -263,7 +285,7 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
             "NOT NULL Record Count": non_null_count,
             "Percentage of NOT NULL Values": non_null_count / total_count * 100,
             "Number of Distinct Values": unique_values,
-            "Uniqueness Index": unique_values / total_count,
+            "Uniqueness Index (unique_values / total_count)": unique_values / total_count,
             "Top 10 Values": top_10_values
         }
 
@@ -277,8 +299,9 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
 
         if data_type == 'string':
             column_info["Max String Length"] = col_data.astype(str).map(len).max()
-            non_english_chars = any(re.search(r'[^\x00-\x7F]+', str(x)) for x in col_data)
-            column_info["Contains Non-English Characters"] = non_english_chars
+            # non_english_chars = any(re.search(r'[^\x00-\x7F]+', str(x)) for x in col_data)
+            non_english_chars = contains_non_english_characters(col_data)
+            column_info["Contains Non-English Characters"] = contains_non_english_characters(col_data)
 
             if non_english_chars:
                 unique_texts = col_data.dropna().unique().tolist()
@@ -287,10 +310,10 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
                 languages_with_confidence = [item for sublist in languages_with_confidence for item in sublist]
 
                 # Sort the list of tuples
-                column_info["Languages Detected with Confidence"] = sorted(languages_with_confidence,
-                                                                           key=lambda x: x[1], reverse=True)[:10]
+                column_info["Languages Detected with Confidence"] = sorted(
+                    {x[0]: x for x in languages_with_confidence}.values(), key=lambda x: x[1], reverse=True)[:5]
             else:
-                column_info["Languages Detected with Confidence"] = [("EN", 1.0)]
+                column_info["Languages Detected with Confidence"] = [("English", 1.0)]
 
         if "date" in data_type or "timestamp" in data_type:
             col_data = pd.to_datetime(col_data, errors='coerce')
@@ -533,6 +556,7 @@ def generate_html_report(data_phases, template_name='jinja_template.html',
     # Return the path to the generated HTML file
     return output_filepath
 
+
 def get_confidence_color(confidence):
     # Assuming confidence is a percentage
     if confidence >= 85:
@@ -542,9 +566,13 @@ def get_confidence_color(confidence):
     else:
         return '#28a745'  # Green for low confidence
 
+
 df_info, random_rows, df, custom_data_types = first_phase('data/input_data.csv', 'prod', 'big_schema_name',
                                                           'ultra_huge_table0677_name')
 summary, categorical_info = second_phase(df, custom_data_types)
+phase3 = third_phase(df, custom_data_types)
+# print(phase3)
+phase4 = fourth_phase(df, custom_data_types)
 # print(categorical_info)
 # random_rows = random_rows.fillna('<i>null/blank</i>')
 # Example usage:
@@ -556,8 +584,8 @@ data_phases = {
     'custom_data_types': custom_data_types,
     'phase2_data': summary,
     'categorical_info': categorical_info,
-    'phase3_data': third_phase(df, custom_data_types),
-    'phase4_data': fourth_phase(df, custom_data_types),
+    'phase3_data': phase3,
+    'phase4_data': phase4,
     'random_rows': random_rows
 }
 
