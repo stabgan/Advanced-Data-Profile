@@ -1,10 +1,19 @@
+# Standard library imports
 import base64
+from io import BytesIO
+from PIL import Image
 import json
-# from weasyprint import HTML
 import os
 import re
 from datetime import datetime
 from io import BytesIO
+import unicodedata
+from collections import Counter
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk import pos_tag
+
+# Third-party libraries
 import pycountry
 import dateparser
 import dateutil.parser as dparser
@@ -14,24 +23,25 @@ import pandas as pd
 import plotly
 import plotly.express as px
 import plotly.graph_objs as go
+from plotly.graph_objs import Histogram, Box, Scatter, Figure, Pie, Bar
 import psutil
 import seaborn as sns
 from jinja2 import Environment, FileSystemLoader
 from matplotlib import pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from scipy import stats
 from scipy.stats import entropy, skew
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
-import unicodedata
-import json
 from fitter import Fitter, get_common_distributions
-from plotly import offline as py_offline
-from plotly.graph_objs import Histogram, Box, Scatter, Figure, Pie, Bar
+import textstat
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
 pd.set_option('display.max_columns', None)
-
+# Ensure you have the appropriate datasets downloaded
+# nltk.download('punkt')
+# nltk.download('averaged_perceptron_tagger')
 schema_name = "schema"
 table_name = "table"
 
@@ -296,7 +306,7 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
 
         # Additional metrics for numeric and string data
         if data_type == 'integer' or data_type == 'float':
-            column_info["Median"] = round(col_data.median(),2)
+            column_info["Median"] = round(col_data.median(), 2)
             if data_type == 'float':
                 max_decimal_places = col_data.dropna().apply(
                     lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0).max()
@@ -348,92 +358,41 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
 #     print("-" * 50)
 
 
-def plot_histogram(data, ax, title):
-    sns.histplot(data, kde=False, ax=ax)
-    ax.set_title(title)
+# Function to create histogram
+def create_histogram(data, title, xaxis_title, yaxis_title):
+    fig = go.Figure(data=[go.Histogram(x=data)])
+    fig.update_layout(title=title, xaxis_title=xaxis_title, yaxis_title=yaxis_title)
+    return fig
 
 
-def plot_boxplot(data, ax, title):
-    sns.boxplot(x=data, ax=ax)
-    ax.set_title(title)
+# Function to create bar chart
+def create_bar_chart(data, title, xaxis_title, yaxis_title):
+    # Assumes data is a list of tuples (name, score)
+    fig = Figure(data=[Bar(x=[x[0] for x in data], y=[x[1] for x in data])])
+    fig.update_layout(title=title, xaxis_title=xaxis_title, yaxis_title=yaxis_title)
+    return fig
 
 
-def plot_violinplot(data, ax, title):
-    sns.violinplot(x=data, ax=ax)
-    ax.set_title(title)
+# Function to convert matplotlib figure to Plotly
+def clean_text(text):
+    """ Remove non-alphabetic characters and extra spaces. """
+    return re.sub(r'[^a-zA-Z\s]', '', text).strip()
 
 
-def plot_qqplot(data, ax, title):
-    stats.probplot(data, dist="norm", plot=ax)
-    ax.set_title(title)
+def is_valid_text(text, min_word_count=5):
+    """ Check if the text has the minimum number of words. """
+    return len(word_tokenize(text)) >= min_word_count
 
 
-# Function to encode plot as base64 for HTML embedding
-def base64_encode_plot(fig):
+# Additional function to convert images to data URI
+def img_to_data_uri(fig):
+    """Convert matplotlib figure to data URI for Plotly"""
     buf = BytesIO()
     fig.savefig(buf, format='png')
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
-
-
-# Function to generate base64 encoded image for embedding in PDF
-def get_image_base64(fig):
-    buf = BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight')
     buf.seek(0)
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    img_data = base64.b64encode(buf.read()).decode('utf-8')
     buf.close()
-    plt.close(fig)  # Close the figure after encoding
-    return image_base64
-
-
-# Function to calculate and plot word cloud
-# Function to calculate and plot word cloud
-def plot_wordcloud(text):
-    # Check if the text is empty
-    if not text.strip():
-        print("No data to generate word cloud for.")
-        return None
-    # If text is not empty, proceed with generating a word cloud image
-    wordcloud = WordCloud(background_color='white').generate(text)
-
-    # Save the image to a BytesIO object
-    image_io = BytesIO()
-    wordcloud.to_image().save(image_io, format='PNG')
-    image_io.seek(0)
-
-    # Encode the image to base64
-    image_base64 = base64.b64encode(image_io.getvalue()).decode('utf-8')
-    image_io.close()
-
-    # Return the base64 encoded image
-    return image_base64
-
-
-# Function to calculate and plot TF-IDF
-def calculate_tfidf(col_data):
-    # Clean the data
-    col_data = col_data.apply(lambda x: re.sub(r'\W+', ' ', x.lower().strip()) if isinstance(x, str) else x)
-    vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
-    if col_data.empty or col_data.str.strip().eq("").all():
-        print("No data available for TF-IDF analysis.")
-        return {}
-    # Attempt to perform TF-IDF analysis, catch any errors that arise
-    try:
-        # Generate TF-IDF matrix
-        tfidf_matrix = vectorizer.fit_transform(col_data)
-        tfidf_scores = pd.DataFrame(tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
-        top_features = tfidf_scores.mean().sort_values(ascending=False).head(10)
-
-        # Return the top features as a dictionary
-        return top_features.to_dict()
-
-    except ValueError as e:
-        # Handle the case where TF-IDF could not be calculated, usually due to empty vocabulary
-        print(f"Error in TF-IDF analysis: {e}")
-        return {}
-
-    # Function to calculate outlier percentage
+    return 'data:image/png;base64,' + img_data
 
 
 def round_if_float(value):
@@ -458,7 +417,7 @@ def best_fit_distribution(data, bins=200, distributions=None):
     f = Fitter(data, bins=bins, distributions=distributions)
     f.fit()
     best_fit = f.get_best(method='sumsquare_error')
-    print(best_fit)
+    # print(best_fit)
     return best_fit
 
 
@@ -522,52 +481,211 @@ def fourth_phase(df, custom_data_types):
             column_info['qq_plot'] = json.dumps(fig_qq, cls=plotly.utils.PlotlyJSONEncoder)
             column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
 
+        elif dtype == 'date' or dtype == 'timestamp':
+
+            date_data = pd.to_datetime(data)
+            try:
+                # Creating histograms for different time aspects
+                fig_year = create_histogram(date_data.dt.year, f"Year Distribution in {col}", "Year", "Count")
+                fig_month = create_histogram(date_data.dt.month, f"Month Distribution in {col}", "Month", "Count")
+                fig_day = create_histogram(date_data.dt.day, f"Day Distribution in {col}", "Day", "Count")
+                fig_hour = create_histogram(date_data.dt.hour, f"Hour Distribution in {col}", "Hour", "Count")
+                fig_minute = create_histogram(date_data.dt.minute, f"Minute Distribution in {col}", "Minute", "Count")
+                fig_second = create_histogram(date_data.dt.second, f"Second Distribution in {col}", "Second", "Count")
+            except Exception as e:
+                print(col, e)
+
+            try:
+
+                # Converting Plotly figures to JSON
+                column_info['year_hist'] = json.dumps(fig_year, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['month_hist'] = json.dumps(fig_month, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['day_hist'] = json.dumps(fig_day, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['hour_hist'] = json.dumps(fig_hour, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['minute_hist'] = json.dumps(fig_minute, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['second_hist'] = json.dumps(fig_second, cls=plotly.utils.PlotlyJSONEncoder)
+            except Exception as e:
+                print(col, e)
+
+        elif dtype == 'string':
+            try:
+                # TF-IDF scoring for n-grams
+                tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 3))
+                tfidf_matrix = tfidf_vectorizer.fit_transform(data)
+                feature_names = tfidf_vectorizer.get_feature_names_out()
+                tfidf_scores = np.mean(tfidf_matrix, axis=0).tolist()[0]
+                top_ngrams = sorted(zip(feature_names, tfidf_scores), key=lambda x: x[1], reverse=True)[:20]
+                fig_tfidf = Figure([Bar(x=[x[0] for x in top_ngrams], y=[x[1] for x in top_ngrams])])
+                fig_tfidf.update_layout(title=f"Top TF-IDF Scores for {col}", xaxis_title="N-grams",
+                                        yaxis_title="TF-IDF Score")
+                column_info['tfidf_bar_chart'] = json.dumps(fig_tfidf, cls=plotly.utils.PlotlyJSONEncoder)
+            except Exception as e:
+                print(col, e)
+            try:
+                # Generate a word cloud image
+                wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(data))
+                plt.figure(figsize=(20, 10), facecolor=None)
+                plt.imshow(wordcloud, interpolation="bilinear")
+                plt.axis("off")
+                plt.tight_layout(pad=0)
+                fig_wordcloud = plt.gcf()
+                data_uri = img_to_data_uri(fig_wordcloud)
+                plt.close()
+
+                # Create a Plotly figure with the image
+                fig = go.Figure()
+                # Add the word cloud image as a layout image
+                fig.add_layout_image(
+                    dict(
+                        source=data_uri,
+                        xref="x",
+                        yref="y",
+                        x=0,
+                        y=1,
+                        sizex=1,
+                        sizey=1,
+                        sizing="stretch",
+                        opacity=1.0,
+                        layer="below"
+                    )
+                )
+                # Update the layout of the figure to ensure the image fits well
+                fig.update_layout(
+                    xaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 1]),
+                    yaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 1]),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    width=800,  # Adjust the width to fit the modal or container size
+                    height=400  # Adjust the height to fit the modal or container size
+                )
+                column_info['word_cloud'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+            except Exception as e:
+                print(col, e)
+
+            try:
+                # Text analysis
+                full_text = ' '.join(data).lower()
+                # Remove all symbols
+                cleaned_text = re.sub(r'[^\w\s]', '', full_text)
+
+                # Replace multiple spaces, tabs, and new lines with a single space
+                cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+
+                # Trim leading and trailing spaces
+                full_text = cleaned_text.strip()
+
+                # Readability score - Flesch Reading Ease
+                column_info['description']['flesch reading score'] = round(np.mean(
+                    [textstat.flesch_reading_ease(text) if is_valid_text(text) else 0 for text in data]), 2)
+                # Character Count
+                column_info['description']['character count'] = textstat.char_count(full_text, ignore_spaces=True)
+
+                # Polysyllable Count
+                column_info['description']['polysyllable count'] = textstat.polysyllabcount(full_text)
+
+                # Monosyllable Count
+                column_info['description']['monosyllable count'] = textstat.monosyllabcount(full_text)
+
+
+            except Exception as e:
+                print(col, e)
+
+            try:
+                # POS tag descriptions according to the Penn Treebank Project
+                pos_tag_descriptions = {
+                    'CC': 'Coordinating conjunction',
+                    'CD': 'Cardinal number',
+                    'DT': 'Determiner',
+                    'EX': 'Existential there',
+                    'FW': 'Foreign word',
+                    'IN': 'Preposition or subordinating conjunction',
+                    'JJ': 'Adjective',
+                    'JJR': 'Adjective, comparative',
+                    'JJS': 'Adjective, superlative',
+                    'LS': 'List item marker',
+                    'MD': 'Modal',
+                    'NN': 'Noun, singular or mass',
+                    'NNS': 'Noun, plural',
+                    'NNP': 'Proper noun, singular',
+                    'NNPS': 'Proper noun, plural',
+                    'PDT': 'Predeterminer',
+                    'POS': 'Possessive ending',
+                    'PRP': 'Personal pronoun',
+                    'PRP$': 'Possessive pronoun',
+                    'RB': 'Adverb',
+                    'RBR': 'Adverb, comparative',
+                    'RBS': 'Adverb, superlative',
+                    'RP': 'Particle',
+                    'SYM': 'Symbol',
+                    'TO': 'to',
+                    'UH': 'Interjection',
+                    'VB': 'Verb, base form',
+                    'VBD': 'Verb, past tense',
+                    'VBG': 'Verb, gerund or present participle',
+                    'VBN': 'Verb, past participle',
+                    'VBP': 'Verb, non-3rd person singular present',
+                    'VBZ': 'Verb, 3rd person singular present',
+                    'WDT': 'Wh-determiner',
+                    'WP': 'Wh-pronoun',
+                    'WP$': 'Possessive wh-pronoun',
+                    'WRB': 'Wh-adverb'
+                }
+                # Assuming `data` is a list of strings (documents) from your dataframe column
+                full_text = ' '.join(data)
+
+                # Tokenize the text into words
+                tokens = word_tokenize(full_text)
+
+                # Get the list of POS tags
+                tags = pos_tag(tokens)
+
+                # Count the frequency of each part of speech
+                pos_counts = Counter(tag for word, tag in tags)
+
+                # Prepare x and y data for the bar chart
+                x_data = list(pos_counts.keys())
+                y_data = list(pos_counts.values())
+                hover_text = [f"{pos_tag_descriptions.get(tag, 'Unknown')}: {count:,}" for tag, count in
+                              pos_counts.items()]
+
+                # Create the bar chart
+                fig = go.Figure(data=[go.Bar(x=x_data, y=y_data, text=hover_text, hoverinfo='text')])
+
+                # Update layout to ensure x-axis labels (POS tags) are shown
+                fig.update_layout(
+                    title=f"POS Tag Counts for {col}",
+                    xaxis=dict(
+                        title="POS Tags",
+                        tickmode='array',
+                        tickvals=x_data,
+                        ticktext=x_data,
+                        tickangle=45,  # Rotate the labels to prevent overlap
+                        showticklabels=True  # Ensure that labels are shown
+                    ),
+                    yaxis=dict(
+                        title="Count"
+                    ),
+                    margin=dict(  # Add margins to the layout to ensure labels are not cut off
+                        l=50,
+                        r=50,
+                        b=100,  # Increase bottom margin to accommodate rotated labels
+                        t=50,
+                        pad=4
+                    ),
+                    autosize=False,  # Disable autosize to maintain the set figure size
+                    height=600,  # Set figure height to ensure labels fit
+                    width=800  # Set figure width as necessary
+                )
+
+                # Serialize the POS counts bar chart to JSON
+                column_info['pos_counts_bar_chart'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+            except Exception as e:
+                print(col, e)
         column_analysis[col] = column_info
 
     return column_analysis
-
-
-#     elif dtype == 'string':
-#         # Word Cloud
-#         if data.any():  # Check if there's any data
-#             combined_text = ' '.join(data.astype(str))
-#             try:
-#                 wordcloud_img = plot_wordcloud(combined_text)
-#             except ValueError as e:
-#                 print(f"Caught an error when generating word cloud: {e}")
-#                 wordcloud_img = None  # or set to a default image
-#             column_info['wordcloud'] = wordcloud_img
-#         else:
-#             print(f"No data to generate word cloud for column: {col}")
-#
-#         # tf idf scores
-#         tfidf_scores = calculate_tfidf(data)
-#         if tfidf_scores:
-#             # We convert the dictionary to a DataFrame for Plotly
-#             tfidf_df = pd.DataFrame(list(tfidf_scores.items()), columns=['feature', 'score'])
-#             fig = px.bar(tfidf_df, x='feature', y='score', title=f'TF-IDF Scores for {col}')
-#             column_info['tfidf_bar'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-#         else:
-#             print(f"No TF-IDF scores to plot for {col}")
-#
-#         # Histogram of text length
-#         text_lengths = data.apply(len)
-#         fig = px.histogram(text_lengths, title=f'Text Length Distribution for {col}')
-#         column_info['text_length_histogram'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-#
-#     elif dtype == 'date' or dtype == 'timestamp':
-#         # Check if there's any data after conversion to datetime
-#         data = pd.to_datetime(data, errors='coerce').dropna()
-#         if not data.empty:
-#             fig = px.histogram(data, title=f'Distribution of {col}')
-#             column_info['date_hist'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-#         else:
-#             print(f"No valid date data for column: {col}")
-#
-#     column_analysis[col] = column_info
-#
-# print(f"Finished processing columns.")
-# return column_analysis
 
 
 # Set up Jinja2 environment
@@ -620,9 +738,9 @@ summary, categorical_info = second_phase(df, custom_data_types)
 phase3 = third_phase(df, custom_data_types)
 # print(phase3)
 phase4 = fourth_phase(df, custom_data_types)
-# print(phase4)
+print(phase4['summaryaccountcode'].keys())
 phase4_serializable = {col: convert_to_serializable(data) for col, data in phase4.items()}
-# print(phase4['summaryaccountcode'])
+# print(phase4['accounttitlecode'].keys())
 # random_rows = random_rows.fillna('<i>null/blank</i>')
 # Example usage:
 # print(random_rows)
