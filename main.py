@@ -452,11 +452,6 @@ def fourth_phase(df, custom_data_types):
             best_fit_name = next(iter(best_fit_results.items()))[0]
             column_info['description']['distribution'] = best_fit_name
 
-            # Preparing data for Q-Q plot
-            qq_plot_data = stats.probplot(data, dist="norm")
-            qq_x = [point[0] for point in qq_plot_data[0]]
-            qq_y = [point[1] for point in qq_plot_data[0]]
-
             # Preparing data for plots
             fig_hist = Figure(data=[Histogram(x=data)])
             fig_hist.update_layout(title=f"Histogram of {col}", xaxis_title=col, yaxis_title="Count")
@@ -464,10 +459,27 @@ def fourth_phase(df, custom_data_types):
             fig_box = Figure(data=[Box(y=data)])
             fig_box.update_layout(title=f"Box Plot of {col}", yaxis_title=col)
 
-            fig_qq = Figure(data=[Scatter(x=qq_x, y=qq_y, mode='markers', name='Data')])
-            fig_qq.add_trace(Scatter(x=qq_x, y=qq_x, mode='lines', name='Q-Q Reference Line'))
-            fig_qq.update_layout(title=f"Q-Q Plot of {col}", xaxis_title="Theoretical Quantiles",
-                                 yaxis_title="Ordered Values")
+            # Standardize the data
+            qq_data = stats.probplot(data, dist="norm")
+            theoretical_quantiles = qq_data[0][0]
+            ordered_values = qq_data[0][1]
+
+            # Create scatter plot for the Q-Q plot data
+            qq_scatter = go.Scatter(x=theoretical_quantiles, y=ordered_values, mode='markers', name='Data')
+
+            # Create a line representing the ideal normal distribution
+            line = go.Scatter(x=theoretical_quantiles, y=qq_data[1][1] + qq_data[1][0] * theoretical_quantiles,
+                              mode='lines', name='Normal Distribution')
+
+            # Create the figure and add traces
+            fig = go.Figure()
+            fig.add_trace(qq_scatter)
+            fig.add_trace(line)
+
+            # Update the layout
+            fig.update_layout(title=f'Q-Q Plot of {col}',
+                              xaxis_title='Theoretical Quantiles',
+                              yaxis_title='Ordered Values')
 
             sorted_data = np.sort(data)
             cum_freq = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
@@ -475,10 +487,11 @@ def fourth_phase(df, custom_data_types):
             fig_cum_freq.update_layout(title=f"Cumulative Frequency Plot of {col}", xaxis_title=col,
                                        yaxis_title="Cumulative Frequency")
 
+
             # Converting Plotly figures to JSON
             column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
             column_info['boxplot'] = json.dumps(fig_box, cls=plotly.utils.PlotlyJSONEncoder)
-            column_info['qq_plot'] = json.dumps(fig_qq, cls=plotly.utils.PlotlyJSONEncoder)
+            column_info['qq_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
             column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
 
         elif dtype == 'date' or dtype == 'timestamp':
