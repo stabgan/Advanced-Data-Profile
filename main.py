@@ -241,7 +241,7 @@ def second_phase(df, custom_data_types):
     # print(custom_data_types)
 
     info_dict = {
-        'Total Data Type Count': len(set(custom_data_types.values())),
+        # 'Total Data Type Count': unique_data_types_count,
         'Int Column Count': len(int_columns),
         'Float Column Count': len(float_columns),
         'String Column Count': len(string_columns),
@@ -275,7 +275,7 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
 
     for col in df.columns:
         col_data = df[col]
-        data_type = custom_data_types[col]  # Using custom data type
+        data_type = custom_data_types[col]
         total_count = len(col_data)
         null_count = col_data.isnull().sum()
         non_null_count = total_count - null_count
@@ -286,17 +286,17 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
             "Column Name": col,
             "Column Data Type": data_type,
             "NULL Record Count": null_count,
-            "Percentage of NULL Values": null_count / total_count * 100,
+            "Percentage of NULL Values": round(null_count / total_count * 100, 2),
             "NOT NULL Record Count": non_null_count,
-            "Percentage of NOT NULL Values": non_null_count / total_count * 100,
+            "Percentage of NOT NULL Values": round(non_null_count / total_count * 100, 2),
             "Number of Distinct Values": unique_values,
-            "Uniqueness Index (unique/total)": unique_values / total_count,
+            "Uniqueness Index (unique/total)": round(unique_values / total_count * 100, 2),
             "Top 10 Values": top_10_values
         }
 
         # Additional metrics for numeric and string data
         if data_type == 'integer' or data_type == 'float':
-            column_info["Median"] = col_data.median()
+            column_info["Median"] = round(col_data.median(),2)
             if data_type == 'float':
                 max_decimal_places = col_data.dropna().apply(
                     lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0).max()
@@ -451,8 +451,8 @@ def calculate_outlier_percentage(data):
 def best_fit_distribution(data, bins=200, distributions=None):
     # If no specific distributions are provided, use a common subset
     if distributions is None:
-        distributions = ['norm', 'lognorm', 'expon', 'weibull_min', 'weibull_max', 'beta', 'gamma', 'logistic', 'laplace']
-
+        distributions = ['norm', 'lognorm', 'expon', 'weibull_min', 'weibull_max', 'beta', 'gamma', 'logistic',
+                         'laplace']
 
     # Set up the Fitter with a limited number of distributions to check
     f = Fitter(data, bins=bins, distributions=distributions)
