@@ -1,19 +1,20 @@
 # Standard library imports
 import base64
-from io import BytesIO
-from PIL import Image
 import json
 import os
 import re
+from collections import Counter
 from datetime import datetime
 from io import BytesIO
 import unicodedata
-from collections import Counter
+
+# Third-party libraries
+from PIL import Image
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk import pos_tag
-
-# Third-party libraries
+from sklearn.decomposition import PCA
+import seaborn as sns
 import pycountry
 import dateparser
 import dateutil.parser as dparser
@@ -25,16 +26,22 @@ import plotly.express as px
 import plotly.graph_objs as go
 from plotly.graph_objs import Histogram, Box, Scatter, Figure, Pie, Bar
 import psutil
-import seaborn as sns
+from plotly.subplots import make_subplots
 from jinja2 import Environment, FileSystemLoader
 from matplotlib import pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from scipy import stats
 from scipy.stats import entropy, skew
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
 from fitter import Fitter, get_common_distributions
 import textstat
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn import metrics
+from mlxtend.frequent_patterns import apriori, association_rules
+from mlxtend.preprocessing import TransactionEncoder
+from sklearn.impute import SimpleImputer
+
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 ft_model = fasttext.load_model('data/lid.176.bin')
@@ -93,16 +100,16 @@ def detect_language_with_confidence(text: str) -> list:
                 # Get the full language name from pycountry
                 try:
                     language = pycountry.languages.get(alpha_2=lang_code)
-                    full_language_names.append((language.name, round(prob, 2)))
+                    full_language_names.append((language.name, round(prob*100, 2)))
                 except AttributeError:
                     # If the language code is not found in pycountry, return the code
-                    full_language_names.append((lang_code, round(prob, 2)))
+                    full_language_names.append((lang_code, round(prob*100, 2)))
             return full_language_names
         except Exception as e:
-            return [('unknown', 0.0)]
+            return [('unknown', 0)]
     else:
         # If text contains only Latin characters, assume it's English or another Latin-based language
-        return [('English', 1.0)]
+        return [('English', 100)]
 
 
 def calculate_entropy(column: pd.Series) -> float:
@@ -328,7 +335,7 @@ def third_phase(df: pd.DataFrame, custom_data_types: dict):
                 column_info["Languages Detected with Confidence"] = sorted(
                     {x[0]: x for x in languages_with_confidence}.values(), key=lambda x: x[1], reverse=True)[:5]
             else:
-                column_info["Languages Detected with Confidence"] = [("English", 1.0)]
+                column_info["Languages Detected with Confidence"] = [("English", 100)]
 
         if "date" in data_type or "timestamp" in data_type:
             col_data = pd.to_datetime(col_data, errors='coerce')
@@ -486,7 +493,6 @@ def fourth_phase(df, custom_data_types):
             fig_cum_freq = Figure(data=[Scatter(x=sorted_data, y=cum_freq)])
             fig_cum_freq.update_layout(title=f"Cumulative Frequency Plot of {col}", xaxis_title=col,
                                        yaxis_title="Cumulative Frequency")
-
 
             # Converting Plotly figures to JSON
             column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
@@ -701,6 +707,103 @@ def fourth_phase(df, custom_data_types):
     return column_analysis
 
 
+def fig_to_json(fig):
+    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+
+def fifth_phase(df):
+    visualizations = {}
+
+    # Segregate columns by type
+    numerical_cols = []
+    categorical_cols = []
+    date_time_cols = []
+
+    for col in df.columns:
+        col_type = custom_data_type(df[col])
+        if col_type in ['integer', 'float']:
+            numerical_cols.append(col)
+        elif col_type in ['string']:
+            if categorical_confidence(df[col], len(df)) > 0:
+                categorical_cols.append(col)
+        elif col_type in ['date', 'timestamp']:
+            date_time_cols.append(col)
+
+    # Numerical Analysis
+    if numerical_cols:
+        # Handling NaN values for numerical columns
+        imputer = SimpleImputer(strategy='mean')  # or median, or most_frequent
+        imputed_data = imputer.fit_transform(df[numerical_cols])
+        scaled_data = StandardScaler().fit_transform(imputed_data)
+
+        # Correlation Analysis
+        corr = df[numerical_cols].corr()
+        heatmap_fig = go.Figure(data=go.Heatmap(z=corr.values, x=corr.columns, y=corr.columns, colorscale='Viridis'))
+        heatmap_fig.update_layout(title='Correlation Heatmap')
+        visualizations['correlation_heatmap'] = fig_to_json(heatmap_fig)
+
+        # Perform PCA
+        pca = PCA(n_components=len(numerical_cols))  # Use all components to get the full loading matrix
+        pca.fit(scaled_data)
+
+        # Retrieve the absolute value of loadings of the first principal component
+        loadings = np.abs(pca.components_[0])
+
+        # Create a series with column names and their corresponding loadings
+        loading_series = pd.Series(loadings, index=numerical_cols)
+
+        # Sort the series to identify the most important features
+        sorted_loadings = loading_series.sort_values(ascending=False)
+
+        # Select the top N features to display in the bar chart, you can choose N based on your preference
+        top_features = sorted_loadings.head(10)
+
+        # Create a bar chart with Plotly
+        pca_bar_fig = go.Figure(data=go.Bar(x=top_features.index, y=top_features.values))
+        pca_bar_fig.update_layout(title='Columns ranked according to contribution to overall variance (PCA)',
+                                  xaxis_title='Features',
+                                  yaxis_title='PCA Loadings')
+
+        # Convert to JSON using fig_to_json
+        visualizations['pca_feature_importance'] = fig_to_json(pca_bar_fig)
+
+        # Perform PCA to reduce the data to 2 dimensions for visualization
+        pca = PCA(n_components=2)
+        pca_result = pca.fit_transform(scaled_data)
+
+        # Running KMeans clustering
+        kmeans = KMeans(n_clusters=3, n_init=10)
+        cluster_labels = kmeans.fit_predict(pca_result)
+
+        # Prepare hover text
+        hover_text = []
+        for i in range(pca_result.shape[0]):
+            text = ''
+            for j, column in enumerate(df[numerical_cols].columns):
+                text += f'{column}: {df[numerical_cols].iloc[i, j]:.2f}<br>'
+            hover_text.append(text)
+
+        # Creating the scatter plot for the first two principal components
+        scatter = go.Scatter(x=pca_result[:, 0], y=pca_result[:, 1],
+                             mode='markers',
+                             marker=dict(color=cluster_labels, colorscale='Viridis', showscale=False),
+                             text=hover_text,
+                             hoverinfo='text')
+
+        # Setting the layout for the plot
+        layout = go.Layout(title='Similar values clustering (KMeans)',
+                           xaxis=dict(title='Direction of highest variance'),
+                           yaxis=dict(title='Direction of second highest variance'),
+                           hovermode='closest')
+
+        # Creating the figure
+        fig = go.Figure(data=[scatter], layout=layout)
+
+        visualizations['kmeans_plot'] = fig_to_json(fig)
+
+    return visualizations
+
+
 # Set up Jinja2 environment
 # Replace 'your_templates_directory' with the actual path to your templates
 env = Environment(loader=FileSystemLoader('.'))
@@ -751,10 +854,10 @@ summary, categorical_info = second_phase(df, custom_data_types)
 phase3 = third_phase(df, custom_data_types)
 # print(phase3)
 phase4 = fourth_phase(df, custom_data_types)
-print(phase4['summaryaccountcode'].keys())
+# print(phase4['summaryaccountcode'].keys())
 phase4_serializable = {col: convert_to_serializable(data) for col, data in phase4.items()}
-# print(phase4['accounttitlecode'].keys())
-# random_rows = random_rows.fillna('<i>null/blank</i>')
+phase5 = fifth_phase(df)
+print(phase5.keys())
 # Example usage:
 # print(random_rows)
 # print(random_rows.to_html)
@@ -766,6 +869,7 @@ data_phases = {
     'categorical_info': categorical_info,
     'phase3_data': phase3,
     'phase4_data': phase4_serializable,
+    'phase5_data': phase5,
     'random_rows': random_rows
 }
 
