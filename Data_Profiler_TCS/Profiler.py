@@ -1,50 +1,45 @@
 # Standard library imports
+import base64
 import contextlib
+import functools
+import gzip
+import io
 import json
+import os
+import pickle
 import re
 from datetime import datetime
+from importlib import resources
 from io import BytesIO
+from itertools import product
 from typing import Union, Any
-import functools
-import pandas
-import pycountry
-import unicodedata
-from sklearn.decomposition import PCA
+
+import datashader as ds
 import dateparser
 import fasttext
+import htmlmin
 import numpy as np
 import pandas as pd
 import plotly
 import plotly.graph_objs as go
-from plotly.graph_objs import Histogram, Box, Scatter, Figure, Pie, Bar
 import psutil
-from jinja2 import Environment, FileSystemLoader
-from matplotlib import pyplot as plt
-from scipy import stats
-from scipy.stats import entropy, skew
-from sklearn.feature_extraction.text import TfidfVectorizer
-from wordcloud import WordCloud
-import textstat
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.impute import SimpleImputer
+import pycountry
 import spacy
-import gzip
-import htmlmin
-from jsmin import jsmin
-from cssmin import cssmin
-from importlib import resources
+import textstat
+import unicodedata
 from bs4 import BeautifulSoup
-import pickle
-import os
-from itertools import product
-import datashader as ds
-from colorcet import fire
-
-import io
-import base64
-from datashader import reductions as rd
-import datashader.transfer_functions as tf
+from cssmin import cssmin
+from jinja2 import Environment, FileSystemLoader
+from jsmin import jsmin
+from matplotlib import pyplot as plt
+from plotly.graph_objs import Histogram, Box, Scatter, Figure, Bar
+from scipy import stats
+from scipy.stats import entropy
+from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from wordcloud import WordCloud
 
 
 # Define your minification functions here
@@ -675,47 +670,6 @@ class DataProfile:
 
             self.phase_3_list.append(column_info)
 
-    def use_plotly_for_plots(self, data, col, column_info):
-        # Preparing data for plots
-        fig_hist = Figure(data=[Histogram(x=data)])
-        fig_hist.update_layout(title=f"Histogram of {col}", xaxis_title=col, yaxis_title="Count")
-
-        fig_box = Figure(data=[Box(y=data)])
-        fig_box.update_layout(title=f"Box Plot of {col}", yaxis_title=col)
-
-        # Standardize the data
-        qq_data = stats.probplot(data, dist="norm")
-        theoretical_quantiles = qq_data[0][0]
-        ordered_values = qq_data[0][1]
-
-        # Create scatter plot for the Q-Q plot data
-        qq_scatter = go.Scatter(x=theoretical_quantiles, y=ordered_values, mode='markers', name='Data')
-
-        # Create a line representing the ideal normal distribution
-        line = go.Scatter(x=theoretical_quantiles, y=qq_data[1][1] + qq_data[1][0] * theoretical_quantiles,
-                          mode='lines', name='Normal Distribution')
-
-        # Create the figure and add traces
-        fig = go.Figure()
-        fig.add_trace(qq_scatter)
-        fig.add_trace(line)
-
-        # Update the layout
-        fig.update_layout(title=f'Q-Q Plot of {col}',
-                          xaxis_title='Theoretical Quantiles',
-                          yaxis_title='Ordered Values')
-
-        sorted_data = np.sort(data)
-        cum_freq = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
-        fig_cum_freq = Figure(data=[Scatter(x=sorted_data, y=cum_freq)])
-        fig_cum_freq.update_layout(title=f"Cumulative Frequency Plot of {col}", xaxis_title=col,
-                                   yaxis_title="Cumulative Frequency")
-
-        # Converting Plotly figures to JSON
-        column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
-        column_info['boxplot'] = json.dumps(fig_box, cls=plotly.utils.PlotlyJSONEncoder)
-        column_info['qq_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-        column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
 
     def fourth_phase(self):
         if self.skip_col_stats == 'Y':
@@ -767,7 +721,46 @@ class DataProfile:
                     'kurtosis': kurtosis,
                     'outlier %': outlier_percentage
                 })
-                self.use_plotly_for_plots(data, col, column_info)
+                # Preparing data for plots
+                fig_hist = Figure(data=[Histogram(x=data)])
+                fig_hist.update_layout(title=f"Histogram of {col}", xaxis_title=col, yaxis_title="Count")
+
+                fig_box = Figure(data=[Box(y=data)])
+                fig_box.update_layout(title=f"Box Plot of {col}", yaxis_title=col)
+
+                # Standardize the data
+                qq_data = stats.probplot(data, dist="norm")
+                theoretical_quantiles = qq_data[0][0]
+                ordered_values = qq_data[0][1]
+
+                # Create scatter plot for the Q-Q plot data
+                qq_scatter = go.Scatter(x=theoretical_quantiles, y=ordered_values, mode='markers', name='Data')
+
+                # Create a line representing the ideal normal distribution
+                line = go.Scatter(x=theoretical_quantiles, y=qq_data[1][1] + qq_data[1][0] * theoretical_quantiles,
+                                  mode='lines', name='Normal Distribution')
+
+                # Create the figure and add traces
+                fig = go.Figure()
+                fig.add_trace(qq_scatter)
+                fig.add_trace(line)
+
+                # Update the layout
+                fig.update_layout(title=f'Q-Q Plot of {col}',
+                                  xaxis_title='Theoretical Quantiles',
+                                  yaxis_title='Ordered Values')
+
+                sorted_data = np.sort(data)
+                cum_freq = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+                fig_cum_freq = Figure(data=[Scatter(x=sorted_data, y=cum_freq)])
+                fig_cum_freq.update_layout(title=f"Cumulative Frequency Plot of {col}", xaxis_title=col,
+                                           yaxis_title="Cumulative Frequency")
+
+                # Converting Plotly figures to JSON
+                column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['boxplot'] = json.dumps(fig_box, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['qq_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
 
 
             elif dtype == 'date' or dtype == 'timestamp':
