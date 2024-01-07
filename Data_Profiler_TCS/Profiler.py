@@ -81,7 +81,7 @@ current_file_path = os.path.abspath(__file__)
 current_directory = os.path.dirname(current_file_path)
 
 # Path to the fasttext model relative to the current script
-model_path = os.path.join(current_directory, 'data', 'lid.176.bin')
+model_path = os.path.join(current_directory, 'data', 'lid.176.ftz')
 
 # Load the model
 
