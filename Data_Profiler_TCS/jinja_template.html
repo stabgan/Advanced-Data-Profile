@@ -801,7 +801,6 @@
                 console.error("Error parsing plot data for " + plotType + ": ", error);
             }
         }
-
 // Adjust Plotly graph container size on modal open to prevent overflow
         $('#visualizationModal').on('shown.bs.modal', function () {
             var plotDivId = $('.plotly-graph-container').children('div').attr('id');
@@ -872,7 +871,6 @@
                 return result;
             }, {});
         }
-
         // Assuming 'phase5_data' is a dictionary with Plotly plot JSON data passed from the server
         var phase5Data = {
         {

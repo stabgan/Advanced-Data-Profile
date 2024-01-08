@@ -8,6 +8,7 @@ import json
 import os
 import pickle
 import re
+from collections import defaultdict
 from datetime import datetime
 from importlib import resources
 from io import BytesIO
@@ -121,14 +122,16 @@ for y, m, d, dss in product(years, months, days, date_separators):
 # Convert the set to a list and sort it
 date_time_formats_list = sorted(list(date_time_formats))
 
-# Global cache for successful formats
+# Global cache for successful formats and their frequencies
 format_cache_file = 'format_cache.pkl'
-format_cache = {}
+format_cache = defaultdict(int)  # Default to 0 for new formats
 
 # Load format cache if exists
 if os.path.exists(format_cache_file):
     with open(format_cache_file, 'rb') as f:
         format_cache = pickle.load(f)
+
+print(format_cache)
 
 
 def validate_date(dates):
@@ -140,23 +143,17 @@ def validate_date(dates):
 
 
 def parse_dates_with_format(column, fmt):
-    """Parse dates using a specific format."""
+    """Parse dates using a specific format, including timezones."""
     try:
-        parsed_dates = pd.to_datetime(column, format=fmt, errors='raise')
+        parsed_dates = pd.to_datetime(column, format=fmt, errors='raise', utc=True)
         if validate_date(parsed_dates):
-            return parsed_dates
+            return parsed_dates.dt.tz_convert(None) if parsed_dates.dt.tz else parsed_dates
     except (ValueError, TypeError):
         return None
 
 
 def try_parse_date(column, date_time_formats_list):
-    """Try parsing dates using various methods."""
-    # Check cache first
-    cached_format = format_cache.get(column.name)
-    if cached_format:
-        parsed_dates = parse_dates_with_format(column, cached_format)
-        if parsed_dates is not None:
-            return parsed_dates
+    """Try parsing dates using various methods, including timezones."""
 
     # Common formats
     common_date_formats_list = [
@@ -177,21 +174,28 @@ def try_parse_date(column, date_time_formats_list):
         '%Y %m %d %H:%M:%S',  # Example: 2023 12 22 04:22:30
         '%Y %m %d'  # Example: 2023 12 22
     ]
-    for fmt in common_date_formats_list:
-        parsed_dates = parse_dates_with_format(column, fmt)
+
+    # Check cache first and sort by frequency
+    sorted_formats = sorted(format_cache.items(), key=lambda x: x[1], reverse=True)
+    for cached_format, _ in sorted_formats:
+        parsed_dates = parse_dates_with_format(column, cached_format)
         if parsed_dates is not None:
-            format_cache[column.name] = fmt  # Update cache
+            format_cache[cached_format] += 1  # Increment frequency
             return parsed_dates
 
-    # Sequential processing for the remaining formats
-    for fmt in date_time_formats_list:
+    # Sequential processing for common and remaining formats
+    for fmt in common_date_formats_list + date_time_formats_list:
         result = parse_dates_with_format(column, fmt)
         if result is not None:
-            format_cache[column.name] = fmt  # Update cache
+            format_cache[fmt] += 1  # Update cache with frequency
             return result
 
-    # Fallback to default parsing
-    return pd.to_datetime(column, errors='coerce')
+    # Fallback to default parsing with timezone handling
+    try:
+        parsed_dates = pd.to_datetime(column, errors='coerce', utc=True)
+        return parsed_dates.dt.tz_convert(None) if parsed_dates.dt.tz else parsed_dates
+    except (ValueError, TypeError):
+        return pd.Series([pd.NaT] * len(column))
 
 
 def custom_data_type(col):
@@ -663,8 +667,10 @@ class DataProfile:
                 else:
                     column_info["Languages Detected with Confidence"] = [("English", 100)]
 
+                    # Updated timezone handling for datetime columns
             if "date" in data_type or "timestamp" in data_type:
-                col_data = pd.to_datetime(col_data, errors='coerce')
+                col_data = pd.to_datetime(col_data, errors='coerce', utc=True)
+                col_data = col_data.dt.tz_convert(None) if col_data.dt.tz else col_data
                 column_info["Min Date/Time Value"] = col_data.min()
                 column_info["Max Date/Time Value"] = col_data.max()
 
@@ -1096,6 +1102,11 @@ class DataProfile:
         compress_html(minified_html, output_filepath)
 
         print(f"Compressed HTML report generated: {output_filepath}.gz\n")
+        print(format_cache)
+        with open(format_cache_file, 'wb') as f:
+            pickle.dump(format_cache, f)
+
+        return output_filepath + '.gz'
 
 
 if __name__ == '__main__':
@@ -1128,6 +1139,4 @@ if __name__ == '__main__':
             data_profiler.fifth_phase()
             data_profiler.generate_html_report()
             # Save format cache for future use
-            with open(format_cache_file, 'wb') as f:
-                pickle.dump(format_cache, f)
-            print("\nDone", file_path, "\n")
+            # Save the updated format cache
