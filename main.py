@@ -1,7 +1,9 @@
-from Data_Profiler_TCS import Profiler
 import os
 import time
 import warnings
+
+from Data_Profiler_TCS import Profiler
+
 warnings.filterwarnings("ignore")
 
 # Specify the folder path
@@ -25,8 +27,8 @@ for file_name in file_list:
 
         # Create a DataProfile object with schema and table name
         data_profiler = Profiler.DataProfile(file_path=file_path, env_name='prod', schema_name=schema_name,
-                                             table_name=table_name, output_folder='full_output', skip_col_stats='N',
-                                             skip_table_stats='N', sample_size_for_plots=1000)
+                                             table_name=table_name, output_folder='output', skip_col_stats='N',
+                                             skip_table_stats='N')
         data_profiler.first_phase()
         data_profiler.second_phase()
         data_profiler.third_phase()
