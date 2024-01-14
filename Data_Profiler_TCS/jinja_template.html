@@ -1,940 +1,1122 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta content="width=device-width, initial-scale=1" name="viewport">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/v/bs5/jszip-3.10.1/dt-1.13.8/b-2.4.2/b-html5-2.4.2/cr-1.7.0/fc-4.3.0/fh-3.4.0/r-2.5.0/sp-2.2.0/sl-1.7.0/datatables.min.css"
-          rel="stylesheet">
-
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.datatables.net/v/bs5/jszip-3.10.1/dt-1.13.8/b-2.4.2/b-html5-2.4.2/cr-1.7.0/fc-4.3.0/fh-3.4.0/r-2.5.0/sp-2.2.0/sl-1.7.0/datatables.min.css"
+      rel="stylesheet"
+    />
 
     <title>Data Profiling Report</title>
     <style>
-        :root {
-            --main-bg-color: #F2F2F2; /* Blue graph and charts */
-            --accent-color-1: #2192BF;
-            --accent-color-2: #6CBAD9;
-            --accent-color-3: #6CC5D9;
-            --accent-color-4: #146EA6;
-            --text-color: #000000;
-        }
+      :root {
+        --main-bg-color: #f2f2f2; /* Blue graph and charts */
+        --accent-color-1: #2192bf;
+        --accent-color-2: #6cbad9;
+        --accent-color-3: #6cc5d9;
+        --accent-color-4: #146ea6;
+        --text-color: #000000;
+      }
 
-        .search-and-legend-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+      .search-and-legend-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
 
-        .legend-container {
-            display: flex;
-            align-items: center;
-        }
+      .legend-container {
+        display: flex;
+        align-items: center;
+      }
 
-        .legend-label {
-            margin-right: 10px;
-            font-weight: bold;
-        }
+      .legend-label {
+        margin-right: 10px;
+        font-weight: bold;
+      }
 
-        /* Adjust the legend badge margins if necessary */
-        #legend .badge {
-            margin: 0 5px;
-        }
+      /* Adjust the legend badge margins if necessary */
+      #legend .badge {
+        margin: 0 5px;
+      }
 
-        .compact-list .list-group-item {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-        }
+      .compact-list .list-group-item {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+      }
 
-        .dropdown-menu {
-            max-width: 1000px;
-            overflow-x: auto; /* Allows horizontal scrolling */
-        }
+      .dropdown-menu {
+        max-width: 1000px;
+        overflow-x: auto; /* Allows horizontal scrolling */
+      }
 
-        /* Remove padding from the dropdown-menu to make it compact */
-        .dropdown-menu .list-group-item {
-            padding: 0.25rem 0.75rem; /* Adjust padding to make it more compact */
-        }
+      /* Remove padding from the dropdown-menu to make it compact */
+      .dropdown-menu .list-group-item {
+        padding: 0.25rem 0.75rem; /* Adjust padding to make it more compact */
+      }
 
-        /* Styling for badges inside list group items */
-        .list-group-item .badge {
-            font-size: 0.75rem; /* Smaller font size for badges */
-        }
+      /* Styling for badges inside list group items */
+      .list-group-item .badge {
+        font-size: 0.75rem; /* Smaller font size for badges */
+      }
 
-        .nav-tabs .nav-item.show .nav-link, .nav-tabs .nav-link.active {
-            color: #fff;
-            background-color: #007bff;
-            border-color: #dee2e6 #dee2e6 #fff;
-        }
+      .nav-tabs .nav-item.show .nav-link,
+      .nav-tabs .nav-link.active {
+        color: #fff;
+        background-color: #007bff;
+        border-color: #dee2e6 #dee2e6 #fff;
+      }
 
-        .nav-link {
-            display: block;
-            padding: 0.5rem 1rem;
-            color: #6c757d;
-            text-decoration: none;
-            background-color: transparent;
-            border: none;
-        }
+      .nav-link {
+        display: block;
+        padding: 0.5rem 1rem;
+        color: #6c757d;
+        text-decoration: none;
+        background-color: transparent;
+        border: none;
+      }
 
-        .nav-tabs {
-            border-bottom: 1px solid #dee2e6;
-        }
+      .nav-tabs {
+        border-bottom: 1px solid #dee2e6;
+      }
 
-        .nav-link:hover {
-            border-color: transparent;
-        }
+      .nav-link:hover {
+        border-color: transparent;
+      }
 
-        .nav-tabs .nav-link {
-            border: 1px solid transparent;
-            border-radius: 0.25rem;
-        }
+      .nav-tabs .nav-link {
+        border: 1px solid transparent;
+        border-radius: 0.25rem;
+      }
 
-        .tab-content > .tab-pane {
-            display: none;
-        }
+      .tab-content > .tab-pane {
+        display: none;
+      }
 
-        .tab-content > .active {
-            display: block;
-        }
+      .tab-content > .active {
+        display: block;
+      }
 
-        /* Ensure the tabs fill the container */
-        .nav-item {
-            width: 50%;
-            text-align: center;
-        }
+      /* Ensure the tabs fill the container */
+      .nav-item {
+        width: 50%;
+        text-align: center;
+      }
 
-        /* Font size for nav-tabs */
-        .nav-tabs .nav-link {
-            font-size: 1.25rem; /* Adjust as needed */
-            font-weight: 500;
-        }
+      /* Font size for nav-tabs */
+      .nav-tabs .nav-link {
+        font-size: 1.25rem; /* Adjust as needed */
+        font-weight: 500;
+      }
 
-        .text-truncate {
-            max-width: 100px; /* Adjust the width as per your requirement */
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+      .text-truncate {
+        max-width: 100px; /* Adjust the width as per your requirement */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
+      /* Custom styles for the tooltip */
+      .tooltip-inner {
+        max-width: 100%; /* or set a specific width */
+        /* Additional styles to make the tooltip wider */
+      }
 
-        /* Custom styles for the tooltip */
-        .tooltip-inner {
-            max-width: 100%; /* or set a specific width */
-            /* Additional styles to make the tooltip wider */
-        }
+      /* If you're using SCSS, you can target the tooltip placement more specifically */
+      .tooltip.bs-tooltip-top .tooltip-inner,
+      .tooltip.bs-tooltip-auto[x-placement^="top"] .tooltip-inner {
+        max-width: none; /* Remove the width restriction */
+      }
 
-        /* If you're using SCSS, you can target the tooltip placement more specifically */
-        .tooltip.bs-tooltip-top .tooltip-inner,
-        .tooltip.bs-tooltip-auto[x-placement^="top"] .tooltip-inner {
-            max-width: none; /* Remove the width restriction */
-        }
+      .modal-body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
 
-        .modal-body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+      .plotly-graph-container {
+        max-width: 90%; /* or the maximum width you want */
+        height: auto; /* this will maintain aspect ratio */
+        margin: auto; /* this will help in centering if flex properties don't work as intended */
+      }
 
-        .plotly-graph-container {
-            max-width: 90%; /* or the maximum width you want */
-            height: auto; /* this will maintain aspect ratio */
-            margin: auto; /* this will help in centering if flex properties don't work as intended */
-        }
+      /*.carousel-control-prev,*/
+      /*.carousel-control-next {*/
+      /*    width: 5%;*/
+      /*}*/
 
-        /*.carousel-control-prev,*/
-        /*.carousel-control-next {*/
-        /*    width: 5%;*/
-        /*}*/
+      /*.carousel-control-prev {*/
+      /*    left: 0;*/
+      /*}*/
 
-        /*.carousel-control-prev {*/
-        /*    left: 0;*/
-        /*}*/
-
-        /*.carousel-control-next {*/
-        /*    right: 0;*/
-        /*}*/
+      /*.carousel-control-next {*/
+      /*    right: 0;*/
+      /*}*/
     </style>
-</head>
-<body class="container">
-<figure class="text-center py-3">
-    <h1 class="display-1 ">Data Profiling Report</h1>
-</figure>
+  </head>
+  <body class="container">
+    <figure class="text-center py-3">
+      <h1 class="display-1">Data Profiling Report</h1>
+    </figure>
 
-<!-- Phase 1 Data -->
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
-        <h1 class="display-5 ">Overview of Table</h1>
-    </figure>
-    <div class="table-responsive">
+    <!-- Phase 1 Data -->
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
+        <h1 class="display-5">Overview of Table</h1>
+      </figure>
+      <div class="table-responsive">
         <table class="table align-middle table-bordered">
-            <!-- Create a table row for each key-value pair -->
-            <thead class="table-dark text-center border-white border-1">
+          <!-- Create a table row for each key-value pair -->
+          <thead class="table-dark text-center border-white border-1">
             <tr>
-                {% for key in phase1_data.keys() %}
-                <th class="align-middle text-center px-3">{{ key }}</th>
-                {% endfor %}
+              {% for key in phase1_data.keys() %}
+              <th class="align-middle text-center px-3">{{ key }}</th>
+              {% endfor %}
             </tr>
-            </thead>
-            <tbody class="align-middle text-center border-black border-1">
+          </thead>
+          <tbody class="align-middle text-center border-black border-1">
             <tr>
-                {% for key,value in phase1_data.items() %}
-                <td class="align-middle text-center">
-                    {{ value }}
-                </td>
-                {% endfor %}
+              {% for key,value in phase1_data.items() %}
+              <td class="align-middle text-center">{{ value }}</td>
+              {% endfor %}
             </tr>
-            </tbody>
+          </tbody>
         </table>
+      </div>
     </div>
-</div>
-<!-- Phase 2 Data -->
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
-        <h1 class="display-5 ">Summary of the Table</h1>
-    </figure>
-    <div class="table-responsive">
+    <!-- Phase 2 Data -->
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
+        <h1 class="display-5">Summary of the Table</h1>
+      </figure>
+      <div class="table-responsive">
         <table class="table align-middle table-bordered">
-            <thead class="table-dark text-center border-white border-1">
+          <thead class="table-dark text-center border-white border-1">
             <!-- Grouping row -->
             <tr>
-                <th class="align-middle text-center " colspan="6">Different DataTypes</th>
-                <th class="align-middle text-center" colspan="2">Maximum Values</th>
-                <th class="align-middle text-center " colspan="4">Null/Not Null Metrics</th>
-                <!-- Add as many groups as you need, adjusting the colspan as necessary -->
-                <!-- If there are columns that are not grouped, use colspan="1" -->
+              <th class="align-middle text-center" colspan="6">
+                Different DataTypes
+              </th>
+              <th class="align-middle text-center" colspan="2">
+                Maximum Values
+              </th>
+              <th class="align-middle text-center" colspan="4">
+                Null/Not Null Metrics
+              </th>
+              <!-- Add as many groups as you need, adjusting the colspan as necessary -->
+              <!-- If there are columns that are not grouped, use colspan="1" -->
             </tr>
             <!-- Header row -->
             <tr>
-                {% for key in phase2_data.keys() %}
-                <th class="align-middle text-center px-3">{{ key }}</th>
-                {% endfor %}
+              {% for key in phase2_data.keys() %}
+              <th class="align-middle text-center px-3">{{ key }}</th>
+              {% endfor %}
             </tr>
-            </thead>
-            <tbody class="align-middle text-center  border-black border-1">
+          </thead>
+          <tbody class="align-middle text-center border-black border-1">
             <tr>
-                {% for value in phase2_data.values() %}
-                <td class="align-middle text-center">
-                    {{ value }}
-                </td>
-                {% endfor %}
+              {% for value in phase2_data.values() %}
+              <td class="align-middle text-center">{{ value }}</td>
+              {% endfor %}
             </tr>
-            </tbody>
+          </tbody>
         </table>
+      </div>
     </div>
-</div>
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
         <h1 class="display-5 m-3">Sample Data</h1>
         <p class="lead">
-            Drag the columns to re-order. You can press ctrl and select multiple rows. Download the selected data as
-            CSV, Excel, or PDF. You can sort the columns by clicking on the header. You can use the filter boxes below
-            to apply multiple filters at once (Only columns with 60% or less unique values are shown as filter boxes).
-            Reloading the page will preserve your applied selections. The top right
-            search bar matches string with all columns.
+          Drag the columns to re-order. You can press ctrl and select multiple
+          rows. Download the selected data as CSV, Excel, or PDF. You can sort
+          the columns by clicking on the header. You can use the filter boxes
+          below to apply multiple filters at once (Only columns with 60% or less
+          unique values are shown as filter boxes). Reloading the page will
+          preserve your applied selections. The top right search bar matches
+          string with all columns.
         </p>
-    </figure>
+      </figure>
 
-    <div class="table-responsive p-3">
+      <div class="table-responsive p-3">
         <table class="table table-dt table-striped table-bordered">
-            <thead class="table-dark text-center border-white border-1">
+          <thead class="table-dark text-center border-white border-1">
             <tr>
-                {% for col in random_rows.columns %}
-                <th class="align-middle text-center px-3">{{ col }}</th>
-                {% endfor %}
+              {% for col in random_rows.columns %}
+              <th class="align-middle text-center px-3">{{ col }}</th>
+              {% endfor %}
             </tr>
-            </thead>
-            <tbody class="align-middle text-center  border-black border-1">
+          </thead>
+          <tbody class="align-middle text-center border-black border-1">
             {% for row in random_rows.itertuples() %}
             <tr>
-                {% for value in row[1:] %} <!-- Skipping the index -->
-                <td class="align-middle text-center">
-                    {% if value is none or value != value %}
-                    <span class="badge bg-danger">Null/Blank</span>
-                    {% else %}
-                    {{ value }}
-                    {% endif %}
-                </td>
-                {% endfor %}
+              {% for value in row[1:] %}
+              <!-- Skipping the index -->
+              <td class="align-middle text-center">
+                {% if value is none or value != value %}
+                <span class="badge bg-danger">Null/Blank</span>
+                {% else %} {{ value }} {% endif %}
+              </td>
+              {% endfor %}
             </tr>
             {% endfor %}
-            </tbody>
+          </tbody>
         </table>
+      </div>
     </div>
-</div>
-<!-- Columns and Datatypes Section -->
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
+    <!-- Columns and Datatypes Section -->
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
         <h1 class="display-5">Columns and Datatypes</h1>
-    </figure>
+      </figure>
 
-    <!-- Search Bar and Legend -->
-    <div class="row mb-3 search-and-legend-container">
+      <!-- Search Bar and Legend -->
+      <div class="row mb-3 search-and-legend-container">
         <!-- Search Input on the left -->
         <div class="col-md-6">
-            <input class="form-control" id="searchInput" placeholder="Type to instantly find any column..."
-                   type="text">
+          <input
+            class="form-control"
+            id="searchInput"
+            placeholder="Type to instantly find any column..."
+            type="text"
+          />
         </div>
         <!-- Legend container -->
         <div class="col-md-6 legend-container position-relative">
-            <div class="legend-label">Categorical Column Confidence:</div>
-            <div data-bs-placement="top" data-bs-toggle="tooltip" id="legend"
-                 title="Categorical Variable Confidence: This is our level of certainty in classifying data into distinct groups. High confidence (85-100%) means that the data fits very well into clear, separate categories. Medium confidence (70-84%) indicates that while data generally fits into categories, there may be some overlap or ambiguity. Low confidence (below 70%) suggests that the categorization is not very clear, with many data points that don't fit neatly into any one group. For example, in categorizing 'Fruit Type' with options like 'Apple', 'Banana', and 'Cherry', high confidence means most fruits in our data can be clearly labeled as one of these without confusion.">
-                <span class="badge" style="background-color: #dc3545;">High</span> <!-- Red -->
-                <span class="badge" style="background-color: #007bff;">Medium</span> <!-- Blue -->
-                <span class="badge" style="background-color: #28a745;">Low</span> <!-- Green -->
-            </div>
+          <div class="legend-label">Categorical Column Confidence:</div>
+          <div
+            data-bs-placement="top"
+            data-bs-toggle="tooltip"
+            id="legend"
+            title="Categorical Variable Confidence: This is our level of certainty in classifying data into distinct groups. High confidence (85-100%) means that the data fits very well into clear, separate categories. Medium confidence (70-84%) indicates that while data generally fits into categories, there may be some overlap or ambiguity. Low confidence (below 70%) suggests that the categorization is not very clear, with many data points that don't fit neatly into any one group. For example, in categorizing 'Fruit Type' with options like 'Apple', 'Banana', and 'Cherry', high confidence means most fruits in our data can be clearly labeled as one of these without confusion."
+          >
+            <span class="badge" style="background-color: #dc3545">High</span>
+            <!-- Red -->
+            <span class="badge" style="background-color: #007bff">Medium</span>
+            <!-- Blue -->
+            <span class="badge" style="background-color: #28a745">Low</span>
+            <!-- Green -->
+          </div>
         </div>
-    </div>
+      </div>
 
-    <!-- Columns and Datatypes Cards -->
-    <div class="d-flex justify-content-start flex-wrap">
+      <!-- Columns and Datatypes Cards -->
+      <div class="d-flex justify-content-start flex-wrap">
         <!-- Data Types Cards -->
-        {% set data_types = ['string', 'integer', 'float', 'date', 'timestamp','empty'] %}
-        {% for data_type in data_types %}
+        {% set data_types = ['string', 'integer', 'float', 'date',
+        'timestamp','empty'] %} {% for data_type in data_types %}
         <div class="card flex-grow-1 m-2">
-            <div class="card-header align-middle text-white bg-dark text-center text-capitalize">
-                {{ data_type }}
-            </div>
-            <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
-                <ul class="align-middle list-group list-group-flush">
-                    {% for col_name, col_type in custom_data_types.items() %}
-                    {% if col_type == data_type %}
-                    <li class="text-center align-middle list-group-item">
-                    <span class="badge"
-                          style="background-color: {{ get_confidence_color(categorical_info[col_name]) }}">
-                        {{ col_name }}
-                    </span>
-                    </li>
-                    {% endif %}
-                    {% endfor %}
-                </ul>
-            </div>
+          <div
+            class="card-header align-middle text-white bg-dark text-center text-capitalize"
+          >
+            {{ data_type }}
+          </div>
+          <div
+            class="card-body p-0"
+            style="max-height: 300px; overflow-y: auto"
+          >
+            <ul class="align-middle list-group list-group-flush">
+              {% for col_name, col_type in custom_data_types.items() %} {% if
+              col_type == data_type %}
+              <li class="text-center align-middle list-group-item">
+                <span
+                  class="badge"
+                  style="background-color: {{ get_confidence_color(categorical_info[col_name]) }}"
+                >
+                  {{ col_name }}
+                </span>
+              </li>
+              {% endif %} {% endfor %}
+            </ul>
+          </div>
         </div>
         {% endfor %}
+      </div>
     </div>
-</div>
 
-
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
         <h1 class="display-5 m-3 p-3">Individual Column Analysis</h1>
-    </figure>
-    <ul class="nav nav-tabs nav-fill mb-3" id="analysisTab" role="tablist">
+      </figure>
+      <ul class="nav nav-tabs nav-fill mb-3" id="analysisTab" role="tablist">
         <li class="nav-item" role="presentation">
-            <button aria-controls="tableView" aria-selected="true" class="nav-link active display-6"
-                    data-bs-target="#tableView" data-bs-toggle="tab" id="table-view-tab" role="tab" type="button">
-                Table View
-            </button>
+          <button
+            aria-controls="tableView"
+            aria-selected="true"
+            class="nav-link active display-6"
+            data-bs-target="#tableView"
+            data-bs-toggle="tab"
+            id="table-view-tab"
+            role="tab"
+            type="button"
+          >
+            Table View
+          </button>
         </li>
         {% if phase4_data %}
         <li class="nav-item" role="presentation">
-            <button aria-controls="statAnalysis" aria-selected="false" class="nav-link display-6"
-                    data-bs-target="#statAnalysis" data-bs-toggle="tab" id="stat-analysis-tab" role="tab"
-                    type="button">Statistical Analysis
-            </button>
+          <button
+            aria-controls="statAnalysis"
+            aria-selected="false"
+            class="nav-link display-6"
+            data-bs-target="#statAnalysis"
+            data-bs-toggle="tab"
+            id="stat-analysis-tab"
+            role="tab"
+            type="button"
+          >
+            Statistical Analysis
+          </button>
         </li>
         {% endif %}
-    </ul>
+      </ul>
 
-    <div class="tab-content" id="analysisTabContent">
-        <div aria-labelledby="table-view-tab" class="tab-pane fade show active" id="tableView" role="tabpanel">
-            <!-- DataTable for Phase 3 -->
-            <div class="table-responsive p-3">
-                <figure class="text-center">
-                    <p class="lead">
-                        Drag the columns to re-order. You can press ctrl and select multiple rows. Download the selected
-                        data as
-                        CSV, Excel, or PDF. You can sort the columns by clicking on the header. You can use the filter
-                        boxes below
-                        to apply multiple filters at once. (Custom 5 columns are shown as filter boxes).
-                        Reloading the page will preserve your applied modifications. The top right
-                        search bar matches string with all columns.
-                    </p>
-                </figure>
-                <table class="table align-middle table-bordered table-dt2 table-striped" id="maintable"
-                       style="width:100%">
-                    <thead class="table-dark text-center border-white border-1">
-                    <tr>
-                        <th class="align-middle text-center " colspan="14">Total Rows in data : {{ phase1_data['Total
-                            Row Count'] }}
-                        </th>
-                    </tr>
-                    <tr>
-                        <th class="align-middle text-center " colspan="2">Column types</th>
-                        <th class="align-middle text-center " colspan="4">Null/Not Null Metrics</th>
-                        <th class="align-middle text-center " colspan="3">Value Metrics</th>
-                        <th class="align-middle text-center " colspan="3">String Metrics</th>
-                        <th class="align-middle text-center " colspan="1">Integer Metric</th>
-                        <th class="align-middle text-center " colspan="1">Float Metric</th>
-                        <!-- Add as many groups as you need, adjusting the colspan as necessary -->
-                        <!-- If there are columns that are not grouped, use colspan="1" -->
-                    </tr>
-                    <tr>
-                        <th class="align-middle text-center px-3">Column Name</th>
-                        <th class="align-middle text-center px-3">Column Data Type</th>
-                        <th class="align-middle text-center px-3">NULL Record Count</th>
-                        <th class="align-middle text-center px-3">Percentage of NULL Values</th>
-                        <th class="align-middle text-center px-3">NOT NULL Record Count</th>
-                        <th class="align-middle text-center px-3">Percentage of NOT NULL Values</th>
-                        <th class="align-middle text-center px-3">Number of Distinct Values</th>
-                        <th class="align-middle text-center px-3">Uniqueness Index (%)</th>
-                        <th class="align-middle text-center px-3">Top 10 Values</th>
-                        <th class="align-middle text-center px-3">Max String Length</th>
-                        <th class="align-middle text-center px-3">Contains Non-English Characters</th>
-                        <th class="align-middle text-center px-3">Languages Detected with Confidence</th>
-                        <th class="align-middle text-center px-3">Median</th>
-                        <th class="align-middle text-center px-3">Max Decimal Precision</th>
-                    </tr>
-                    </thead>
-                    <tbody class="align-middle text-center border-black border-1">
-                    {% for column_data in phase3_data %}
-                    <tr>
-                        <td class="align-middle text-center">{{ column_data.get('Column Name', '') }}</td>
-                        <td class="align-middle text-center">{{ column_data.get('Column Data Type', '') }}</td>
-                        <td class="align-middle text-center">
-                            {% if column_data.get('NULL Record Count', 0) == 0 %}
-                            <span class="badge bg-success">{{ column_data.get('NULL Record Count', '') }}</span>
-                            {% else %}
-                            {{ column_data.get('NULL Record Count', '') }}
-                            {% endif %}
-                        </td>
-                        <!-- Percentage of NULL Values -->
-                        <td class="align-middle text-center" style="position: relative;">
-                            {% set null_percentage = column_data.get('Percentage of NULL Values', 0) %}
-                            {% if null_percentage %}
-                            <div style="background-color: #ffcccc; width: {{ null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0;"></div>
-                            <span style="position: relative; z-index: 2; color: black;">{{ null_percentage }}%</span>
-                            {% else %}
-                            <span>{{ null_percentage }}%</span>
-                            {% endif %}
-                        </td>
-                        <td class="align-middle text-center">
-                            {% if column_data.get('NULL Record Count', 0) == 0 %}
-                            <span class="badge bg-success">{{ column_data.get('NOT NULL Record Count', '') }}</span>
-                            {% else %}
-                            {{ column_data.get('NOT NULL Record Count', '') }}
-                            {% endif %}
-                        </td>
-                        <!-- Percentage of NOT NULL Values -->
+      <div class="tab-content" id="analysisTabContent">
+        <div
+          aria-labelledby="table-view-tab"
+          class="tab-pane fade show active"
+          id="tableView"
+          role="tabpanel"
+        >
+          <!-- DataTable for Phase 3 -->
+          <div class="table-responsive p-3">
+            <figure class="text-center">
+              <p class="lead">
+                Drag the columns to re-order. You can press ctrl and select
+                multiple rows. Download the selected data as CSV, Excel, or PDF.
+                You can sort the columns by clicking on the header. You can use
+                the filter boxes below to apply multiple filters at once.
+                (Custom 5 columns are shown as filter boxes). Reloading the page
+                will preserve your applied modifications. The top right search
+                bar matches string with all columns.
+              </p>
+            </figure>
+            <table
+              class="table align-middle table-bordered table-dt2 table-striped"
+              id="maintable"
+              style="width: 100%"
+            >
+              <thead class="table-dark text-center border-white border-1">
+                <tr>
+                  <th class="align-middle text-center" colspan="14">
+                    Total Rows in data : {{ phase1_data['Total Row Count'] }}
+                  </th>
+                </tr>
+                <tr>
+                  <th class="align-middle text-center" colspan="2">
+                    Column types
+                  </th>
+                  <th class="align-middle text-center" colspan="4">
+                    Null/Not Null Metrics
+                  </th>
+                  <th class="align-middle text-center" colspan="3">
+                    Value Metrics
+                  </th>
+                  <th class="align-middle text-center" colspan="3">
+                    String Metrics
+                  </th>
+                  <th class="align-middle text-center" colspan="1">
+                    Integer Metric
+                  </th>
+                  <th class="align-middle text-center" colspan="1">
+                    Float Metric
+                  </th>
+                  <!-- Add as many groups as you need, adjusting the colspan as necessary -->
+                  <!-- If there are columns that are not grouped, use colspan="1" -->
+                </tr>
+                <tr>
+                  <th class="align-middle text-center px-3">Column Name</th>
+                  <th class="align-middle text-center px-3">
+                    Column Data Type
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    NULL Record Count
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Percentage of NULL Values
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    NOT NULL Record Count
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Percentage of NOT NULL Values
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Number of Distinct Values
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Uniqueness Index (%)
+                  </th>
+                  <th class="align-middle text-center px-3">Top 10 Values</th>
+                  <th class="align-middle text-center px-3">
+                    Max String Length
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Contains Non-English Characters
+                  </th>
+                  <th class="align-middle text-center px-3">
+                    Languages Detected with Confidence
+                  </th>
+                  <th class="align-middle text-center px-3">Median</th>
+                  <th class="align-middle text-center px-3">
+                    Max Decimal Precision
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="align-middle text-center border-black border-1">
+                {% for column_data in phase3_data %}
+                <tr>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Column Name', '') }}
+                  </td>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Column Data Type', '') }}
+                  </td>
+                  <td class="align-middle text-center">
+                    {% if column_data.get('NULL Record Count', 0) == 0 %}
+                    <span class="badge bg-success"
+                      >{{ column_data.get('NULL Record Count', '') }}</span
+                    >
+                    {% else %} {{ column_data.get('NULL Record Count', '') }} {%
+                    endif %}
+                  </td>
+                  <!-- Percentage of NULL Values -->
+                  <td
+                    class="align-middle text-center"
+                    style="position: relative"
+                  >
+                    {% set null_percentage = column_data.get('Percentage of NULL
+                    Values', 0) %} {% if null_percentage %}
+                    <div
+                      style="background-color: #ffcccc; width: {{ null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0;"
+                    ></div>
+                    <span style="position: relative; z-index: 2; color: black"
+                      >{{ null_percentage }}%</span
+                    >
+                    {% else %}
+                    <span>{{ null_percentage }}%</span>
+                    {% endif %}
+                  </td>
+                  <td class="align-middle text-center">
+                    {% if column_data.get('NULL Record Count', 0) == 0 %}
+                    <span class="badge bg-success"
+                      >{{ column_data.get('NOT NULL Record Count', '') }}</span
+                    >
+                    {% else %} {{ column_data.get('NOT NULL Record Count', '')
+                    }} {% endif %}
+                  </td>
+                  <!-- Percentage of NOT NULL Values -->
 
-                        <td class="align-middle text-center" style="position: relative;">
-                            {% set not_null_percentage = column_data.get('Percentage of NOT NULL Values', 0) %}
-                            {% if not_null_percentage %}
-                            <div style="background-color: #ccffcc; width: {{ not_null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0;"></div>
-                            <span style="position: relative; z-index: 2; color: black;">{{ not_null_percentage }}%</span>
-                            {% else %}
-                            <span>{{ not_null_percentage }}%</span>
-                            {% endif %}
-                        </td>
-                        <td class="align-middle text-center">{{ column_data.get('Number of Distinct Values', '') }}</td>
-                        <td class="align-middle text-center">
-                            {% if column_data.get('Uniqueness Index (unique/total)', 0) == 100 %}
-                            <span class="badge bg-primary">100</span>
-                            {% else %}
-                            {{ column_data.get('Uniqueness Index (unique/total)', '') }}
-                            {% endif %}
-                        </td>
-                        <!-- Top 10 Values Column -->
-                        <td class="align-middle text-center p-0">
-                            {% if column_data['Top 10 Values']|length >= 1 %}
-                            <div class="dropdown">
-                                <button aria-expanded="false" class="btn btn-success  btn-sm dropdown-toggle"
-                                        data-bs-toggle="dropdown" id="dropdownTopValues{{ loop.index }}"
-                                        type="button">
-                                    Values
-                                </button>
-                                <div aria-labelledby="dropdownTopValues{{ loop.index }}" class="dropdown-menu p-0">
-                                    <ul class="list-group list-group-flush">
-                                        {% for key, value in column_data['Top 10 Values'].items() %}
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            {{ key }}
-                                            <span class="badge bg-primary rounded-pill">{{ value }}</span>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                            </div>
-                            {% endif %}
-                        </td>
+                  <td
+                    class="align-middle text-center"
+                    style="position: relative"
+                  >
+                    {% set not_null_percentage = column_data.get('Percentage of
+                    NOT NULL Values', 0) %} {% if not_null_percentage %}
+                    <div
+                      style="background-color: #ccffcc; width: {{ not_null_percentage }}%; height: 100%; position: absolute; top: 0; left: 0;"
+                    ></div>
+                    <span style="position: relative; z-index: 2; color: black"
+                      >{{ not_null_percentage }}%</span
+                    >
+                    {% else %}
+                    <span>{{ not_null_percentage }}%</span>
+                    {% endif %}
+                  </td>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Number of Distinct Values', '') }}
+                  </td>
+                  <td class="align-middle text-center">
+                    {% if column_data.get('Uniqueness Index (unique/total)', 0)
+                    == 100 %}
+                    <span class="badge bg-primary">100</span>
+                    {% else %} {{ column_data.get('Uniqueness Index
+                    (unique/total)', '') }} {% endif %}
+                  </td>
+                  <!-- Top 10 Values Column -->
+                  <td class="align-middle text-center p-0">
+                    {% if column_data['Top 10 Values']|length >= 1 %}
+                    <div class="dropdown">
+                      <button
+                        aria-expanded="false"
+                        class="btn btn-success btn-sm dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        id="dropdownTopValues{{ loop.index }}"
+                        type="button"
+                      >
+                        Values
+                      </button>
+                      <div
+                        aria-labelledby="dropdownTopValues{{ loop.index }}"
+                        class="dropdown-menu p-0"
+                      >
+                        <ul class="list-group list-group-flush">
+                          {% for key, value in column_data['Top 10
+                          Values'].items() %}
+                          <li
+                            class="list-group-item d-flex justify-content-between align-items-center"
+                          >
+                            {{ key }}
+                            <span class="badge bg-primary rounded-pill"
+                              >{{ value }}</span
+                            >
+                          </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                    </div>
+                    {% endif %}
+                  </td>
 
-
-                        <td class="align-middle text-center">{{ column_data.get('Max String Length', '') }}</td>
-                        <td class="align-middle text-center">
-                            {% if column_data.get('Contains Non-English Characters', False) %}
-                            <span class="badge bg-danger">Yes</span>
-                            {% else %}
-                            No
-                            {% endif %}
-                        </td>
-                        <!-- Languages Detected Column -->
-                        <td class="align-middle text-center p-0">
-                            {% if column_data['Languages Detected with Confidence']|length >= 1 %}
-                            <div class="dropdown">
-                                <button aria-expanded="false" class="btn btn-info btn-sm dropdown-toggle"
-                                        data-bs-toggle="dropdown" id="dropdownLangConf{{ loop.index }}"
-                                        type="button">
-                                    Languages
-                                </button>
-                                <div aria-labelledby="dropdownLangConf{{ loop.index }}" class="dropdown-menu p-0">
-                                    <ul class="list-group list-group-flush">
-                                        {% for lang, confidence in column_data['Languages Detected with Confidence'] %}
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            {{ lang }}
-                                            <span class="badge bg-secondary rounded-pill">{{ confidence }}</span>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                            </div>
-                            {% endif %}
-
-                        </td>
-                        <td class="align-middle text-center">{{ column_data.get('Median', '') }}</td>
-                        <td class="align-middle text-center">{{ column_data.get('Max Decimal Precision', '') }}</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-                <div style="width: 100%;">
-                    <button class="btn btn-success" id="download-pdf" style="width: 100%;">Download as PDF</button>
-                </div>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Max String Length', '') }}
+                  </td>
+                  <td class="align-middle text-center">
+                    {% if column_data.get('Contains Non-English Characters',
+                    False) %}
+                    <span class="badge bg-danger">Yes</span>
+                    {% else %} No {% endif %}
+                  </td>
+                  <!-- Languages Detected Column -->
+                  <td class="align-middle text-center p-0">
+                    {% if column_data['Languages Detected with
+                    Confidence']|length >= 1 %}
+                    <div class="dropdown">
+                      <button
+                        aria-expanded="false"
+                        class="btn btn-info btn-sm dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        id="dropdownLangConf{{ loop.index }}"
+                        type="button"
+                      >
+                        Languages
+                      </button>
+                      <div
+                        aria-labelledby="dropdownLangConf{{ loop.index }}"
+                        class="dropdown-menu p-0"
+                      >
+                        <ul class="list-group list-group-flush">
+                          {% for lang, confidence in column_data['Languages
+                          Detected with Confidence'] %}
+                          <li
+                            class="list-group-item d-flex justify-content-between align-items-center"
+                          >
+                            {{ lang }}
+                            <span class="badge bg-secondary rounded-pill"
+                              >{{ confidence }}</span
+                            >
+                          </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                    </div>
+                    {% endif %}
+                  </td>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Median', '') }}
+                  </td>
+                  <td class="align-middle text-center">
+                    {{ column_data.get('Max Decimal Precision', '') }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div style="width: 100%">
+              <button
+                class="btn btn-success"
+                id="download-pdf"
+                style="width: 100%"
+              >
+                Download as PDF
+              </button>
             </div>
+          </div>
         </div>
         {% if phase4_data %}
-        <div aria-labelledby="stat-analysis-tab" class="tab-pane fade" id="statAnalysis" role="tabpanel">
-            <div class="legend text-center mb-3">
-                <h6>Legend:</h6>
-                <span class="badge bg-primary">String</span>
-                <span class="badge bg-success">Integer</span>
-                <span class="badge bg-info">Float</span>
-                <span class="badge bg-warning">Date/Timestamp</span>
-                <!-- Add more as necessary -->
-            </div>
+        <div
+          aria-labelledby="stat-analysis-tab"
+          class="tab-pane fade"
+          id="statAnalysis"
+          role="tabpanel"
+        >
+          <div class="legend text-center mb-3">
+            <h6>Legend:</h6>
+            <span class="badge bg-primary">String</span>
+            <span class="badge bg-success">Integer</span>
+            <span class="badge bg-info">Float</span>
+            <span class="badge bg-warning">Date/Timestamp</span>
+            <!-- Add more as necessary -->
+          </div>
 
-            <div class="mb-3">
-                <input class="form-control" id="columnSearchInput" placeholder="Search columns..." type="text">
-            </div>
+          <div class="mb-3">
+            <input
+              class="form-control"
+              id="columnSearchInput"
+              placeholder="Search columns..."
+              type="text"
+            />
+          </div>
 
-            <div class="row row-cols-1 row-cols-md-4 g-4" id="cardsContainer">
-                <!-- Cards will be inserted here by JavaScript -->
-            </div>
+          <div class="row row-cols-1 row-cols-md-4 g-4" id="cardsContainer">
+            <!-- Cards will be inserted here by JavaScript -->
+          </div>
         </div>
         {% endif %}
+      </div>
     </div>
-</div>
-<!--TOTAL PLOTS-->
-{% if phase5_data %}
-<div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
-    <figure class="text-center">
+    <!--TOTAL PLOTS-->
+    {% if phase5_data %}
+    <div class="container-fluid my-4 shadow p-3 mb-5 bg-body rounded">
+      <figure class="text-center">
         <h1 class="display-5 m-3 p-3">Statistical Analysis of the Table</h1>
-        <p class="lead"> These plots are generated at the table level. PCA, Correlation and Clustering plots only
-            considers numerical columns.</p>
+        <p class="lead">
+          These plots are generated at the table level. PCA, Correlation and
+          Clustering plots only considers numerical columns.
+        </p>
         <p>Number of samples: {{ number_of_samples }}</p>
-    </figure>
-    <div id="plotly-plots-container">
+      </figure>
+      <div id="plotly-plots-container">
         <!-- Your content for plotly-plots-container goes here -->
+      </div>
     </div>
-</div>
-{% endif %}
+    {% endif %}
 
-<!--modal-->
-<!-- Modal -->
-<div aria-hidden="true" aria-labelledby="visualizationModalLabel" class="modal fade" id="visualizationModal"
-     tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-centered"> <!-- Vertically centered modal -->
+    <!--modal-->
+    <!-- Modal -->
+    <div
+      aria-hidden="true"
+      aria-labelledby="visualizationModalLabel"
+      class="modal fade"
+      id="visualizationModal"
+      tabindex="-1"
+    >
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <!-- Vertically centered modal -->
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="visualizationModalLabel">Column Visualization</h5>
-                <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Grid Layout for Plotly Visualizations -->
-                <div class="row">
-                    <div class="col-12">
-                        <!-- Carousel for Plotly Visualizations -->
-                        <div class="carousel carousel-dark" data-bs-interval="false" id="visualizationCarousel">
-                            <div class="carousel-inner">
-                                <!-- Carousel items will be dynamically inserted here -->
-                            </div>
-                        </div>
-                    </div>
+          <div class="modal-header">
+            <h5 class="modal-title" id="visualizationModalLabel">
+              Column Visualization
+            </h5>
+            <button
+              aria-label="Close"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              type="button"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <!-- Grid Layout for Plotly Visualizations -->
+            <div class="row">
+              <div class="col-12">
+                <!-- Carousel for Plotly Visualizations -->
+                <div
+                  class="carousel carousel-dark"
+                  data-bs-interval="false"
+                  id="visualizationCarousel"
+                >
+                  <div class="carousel-inner">
+                    <!-- Carousel items will be dynamically inserted here -->
+                  </div>
                 </div>
-                <button class="carousel-control-prev carousel-dark" data-bs-slide="prev"
-                        data-bs-target="#visualizationCarousel"
-                        type="button">
-                    <span aria-hidden="true" class="carousel-control-prev-icon"></span>
-                    <span class="visually-hidden">Previous</span>
-                </button>
-                <button class="carousel-control-next carousel-dark" data-bs-slide="next"
-                        data-bs-target="#visualizationCarousel"
-                        type="button">
-                    <span aria-hidden="true" class="carousel-control-next-icon"></span>
-                    <span class="visually-hidden">Next</span>
-                </button>
+              </div>
             </div>
-            <div class="modal-footer">
-                <!-- Previous and Next column buttons -->
-                <button class="btn btn-secondary" id="prevColumn" type="button">Previous column</button>
-                <button class="btn btn-secondary" id="nextColumn" type="button">Next column</button>
-            </div>
+            <button
+              class="carousel-control-prev carousel-dark"
+              data-bs-slide="prev"
+              data-bs-target="#visualizationCarousel"
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                class="carousel-control-prev-icon"
+              ></span>
+              <span class="visually-hidden">Previous</span>
+            </button>
+            <button
+              class="carousel-control-next carousel-dark"
+              data-bs-slide="next"
+              data-bs-target="#visualizationCarousel"
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                class="carousel-control-next-icon"
+              ></span>
+              <span class="visually-hidden">Next</span>
+            </button>
+          </div>
+          <div class="modal-footer">
+            <!-- Previous and Next column buttons -->
+            <button class="btn btn-secondary" id="prevColumn" type="button">
+              Previous column
+            </button>
+            <button class="btn btn-secondary" id="nextColumn" type="button">
+              Next column
+            </button>
+          </div>
         </div>
+      </div>
     </div>
-</div>
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.datatables.net/v/bs5/jszip-3.10.1/dt-1.13.8/b-2.4.2/b-html5-2.4.2/cr-1.7.0/fc-4.3.0/fh-3.4.0/r-2.5.0/sp-2.2.0/sl-1.7.0/datatables.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/v/bs5/jszip-3.10.1/dt-1.13.8/b-2.4.2/b-html5-2.4.2/cr-1.7.0/fc-4.3.0/fh-3.4.0/r-2.5.0/sp-2.2.0/sl-1.7.0/datatables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
-<script>
-    $(document).ready(function () {
+    <script>
+          $(document).ready(function () {
 
-        // Initialize tooltips
-        $('[data-bs-toggle="tooltip"]').tooltip();
+              // Initialize tooltips
+              $('[data-bs-toggle="tooltip"]').tooltip();
 
-// Initialize DataTables with the first column fixed
-        // Initialize DataTables for .table-dt2
-        var tableDt2 = $('.table-dt2').DataTable({
-            scrollY: "500px",
-            scrollX: true,
-            responsive: false,
-            select: true,
-            stateSave: true,
-            colReorder: true,
-            bFilter: true,  // Ensure filtering is enabled
-            buttons: [
-                'excelHtml5',
-                'csvHtml5'
-            ],
-            pageLength: -1,
-            lengthMenu: [
-                [10, 25, 50, -1],
-                [10, 25, 50, 'All']
-            ],
-            dom:
-                "<'row'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4 text-center'B><'col-sm-12 col-md-4'f>>" +
-                "<'row'<'col-sm-12'P>>" +
-                "<'row'<'col-sm-12'tr>>" +
-                "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-            searchPanes: {
-                columns: [0, 1, 9, 10, 13],
-                threshold: 1
-            }
-        });
+      // Initialize DataTables with the first column fixed
+              // Initialize DataTables for .table-dt2
+              var tableDt2 = $('.table-dt2').DataTable({
+                  scrollY: "500px",
+                  scrollX: true,
+                  responsive: false,
+                  select: true,
+                  stateSave: true,
+                  colReorder: true,
+                  bFilter: true,  // Ensure filtering is enabled
+                  buttons: [
+                      'excelHtml5',
+                      'csvHtml5'
+                  ],
+                  pageLength: -1,
+                  lengthMenu: [
+                      [10, 25, 50, -1],
+                      [10, 25, 50, 'All']
+                  ],
+                  dom:
+                      "<'row'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4 text-center'B><'col-sm-12 col-md-4'f>>" +
+                      "<'row'<'col-sm-12'P>>" +
+                      "<'row'<'col-sm-12'tr>>" +
+                      "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+                  searchPanes: {
+                      columns: [0, 1, 9, 10, 13],
+                      threshold: 1
+                  }
+              });
 
-        // Initialize DataTables for .table-dt
-        var tableDt = $('.table-dt').DataTable({
-            scrollX: true,
-            responsive: false,
-            select: true,
-            stateSave: true,
-            colReorder: true,
-            bFilter: true,  // Ensure filtering is enabled
-            buttons: [
-                'excelHtml5',
-                'csvHtml5',
-                'pdfHtml5'
-            ],
-            lengthMenu: [
-                [10, 25, 50, -1],
-                [10, 25, 50, 'All']
-            ],
-            dom:
-                "<'row'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4 text-center'B><'col-sm-12 col-md-4'f>>" +
-                "<'row'<'col-sm-12'P>>" +
-                "<'row'<'col-sm-12'tr>>" +
-                "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-        });
+              // Initialize DataTables for .table-dt
+              var tableDt = $('.table-dt').DataTable({
+                  scrollX: true,
+                  responsive: false,
+                  select: true,
+                  stateSave: true,
+                  colReorder: true,
+                  bFilter: true,  // Ensure filtering is enabled
+                  buttons: [
+                      'excelHtml5',
+                      'csvHtml5',
+                      'pdfHtml5'
+                  ],
+                  lengthMenu: [
+                      [10, 25, 50, -1],
+                      [10, 25, 50, 'All']
+                  ],
+                  dom:
+                      "<'row'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4 text-center'B><'col-sm-12 col-md-4'f>>" +
+                      "<'row'<'col-sm-12'P>>" +
+                      "<'row'<'col-sm-12'tr>>" +
+                      "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+              });
 
-        // Attach event listener to DataTable instance for search event in .table-dt2
-        tableDt2.on('search.dt', function () {
-            tableDt2.page('first').draw('page');
-        });
+              // Attach event listener to DataTable instance for search event in .table-dt2
+              tableDt2.on('search.dt', function () {
+                  tableDt2.page('first').draw('page');
+              });
 
-        // Attach event listener to DataTable instance for search event in .table-dt
-        tableDt.on('search.dt', function () {
-            tableDt.page('first').draw('page');
-        });
+              // Attach event listener to DataTable instance for search event in .table-dt
+              tableDt.on('search.dt', function () {
+                  tableDt.page('first').draw('page');
+              });
 
-        // Live search functionality for column names
-        $('#searchInput').on('keyup', function () {
-            var value = $(this).val().toLowerCase();
+              // Live search functionality for column names
+              $('#searchInput').on('keyup', function () {
+                  var value = $(this).val().toLowerCase();
 
-            // Loop through all list group items in each card
-            $(".list-group-item").each(function () {
-                var columnName = $(this).text().trim().toLowerCase();
+                  // Loop through all list group items in each card
+                  $(".list-group-item").each(function () {
+                      var columnName = $(this).text().trim().toLowerCase();
 
-                // Show or hide the list group item based on if the column name matches the search term
-                if (columnName.includes(value)) {
-                    $(this).show();
-                } else {
-                    $(this).hide();
-                }
-            });
-        });
+                      // Show or hide the list group item based on if the column name matches the search term
+                      if (columnName.includes(value)) {
+                          $(this).show();
+                      } else {
+                          $(this).hide();
+                      }
+                  });
+              });
 
-        // Parse JSON data passed from Jinja
-        var phase4Data = {
-        {
-            phase4_data | tojson | safe
-        }
-    }
-        ;
-        var customDataTypes = {
-        {
-            custom_data_types | tojson | safe
-        }
-    }
-        ;
+              // Parse JSON data passed from Jinja
+              var phase4Data = {
+              {
+                  phase4_data | tojson | safe
+              }
+          }
+              ;
+              var customDataTypes = {
+              {
+                  custom_data_types | tojson | safe
+              }
+          }
+              ;
 
-        // Function to generate cards for columns
-        function generateCards(data) {
-            var cardsContainer = $('#cardsContainer');
-            cardsContainer.empty(); // Clear previous cards
+              // Function to generate cards for columns
+              function generateCards(data) {
+                  var cardsContainer = $('#cardsContainer');
+                  cardsContainer.empty(); // Clear previous cards
 
-            Object.keys(data).sort().forEach(function (column) {
-                var metrics = data[column];
-                var dtype = customDataTypes[column];
-                var badgeClass = getBadgeClass(dtype);
+                  Object.keys(data).sort().forEach(function (column) {
+                      var metrics = data[column];
+                      var dtype = customDataTypes[column];
+                      var badgeClass = getBadgeClass(dtype);
 
-                var card = $('<div class="col"></div>');
-                var cardHtml = `
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-header text-center bg-dark text-white">${column}</div>
-                        <div class="card-body d-flex flex-column">
-                            <span class="${badgeClass}">${dtype}</span>
-                            <ul class="list-group list-group-flush mt-2 flex-grow-1">
-                                ${generateListItems(metrics.description, badgeClass)}
-                            </ul>
-                            <button type="button" class="btn btn-outline-dark mt-3 align-self-center visualize-btn" data-bs-toggle="modal" data-column-name="${column}" data-bs-target="#visualizationModal">
-                                Visualize
-                            </button>
-                        </div>
-                    </div>
-                `;
-                card.html(cardHtml);
-                cardsContainer.append(card);
-            });
-        }
+                      var card = $('<div class="col"></div>');
+                      var cardHtml = `
+                          <div class="card h-100 shadow-sm">
+                              <div class="card-header text-center bg-dark text-white">${column}</div>
+                              <div class="card-body d-flex flex-column">
+                                  <span class="${badgeClass}">${dtype}</span>
+                                  <ul class="list-group list-group-flush mt-2 flex-grow-1">
+                                      ${generateListItems(metrics.description, badgeClass)}
+                                  </ul>
+                                  <button type="button" class="btn btn-outline-dark mt-3 align-self-center visualize-btn" data-bs-toggle="modal" data-column-name="${column}" data-bs-target="#visualizationModal">
+                                      Visualize
+                                  </button>
+                              </div>
+                          </div>
+                      `;
+                      card.html(cardHtml);
+                      cardsContainer.append(card);
+                  });
+              }
 
-        // Generate the initial set of cards
-        generateCards(phase4Data);
+              // Generate the initial set of cards
+              generateCards(phase4Data);
 
-        // Search functionality
-        $('#columnSearchInput').on('input', function () {
-            var searchTerm = $(this).val().toLowerCase();
-            var filteredData = filterData(phase4Data, searchTerm);
-            generateCards(filteredData);
-        });
+              // Search functionality
+              $('#columnSearchInput').on('input', function () {
+                  var searchTerm = $(this).val().toLowerCase();
+                  var filteredData = filterData(phase4Data, searchTerm);
+                  generateCards(filteredData);
+              });
 
-        // Event handler for visualize button clicks
-        $(document).on('click', '.visualize-btn', function () {
-            var columnName = $(this).data('column-name');
-            $('#visualizationModalLabel').text('Column Visualization: ' + columnName);
-            loadVisualizationCarousel(columnName);
-            $('#visualizationModal').modal('show');
-        });
-        let columnNames = Object.keys(phase4Data); // Array of column names
-        let currentColumnIndex = 0; // Initialize with the first column index
+              // Event handler for visualize button clicks
+              $(document).on('click', '.visualize-btn', function () {
+                  var columnName = $(this).data('column-name');
+                  $('#visualizationModalLabel').text('Column Visualization: ' + columnName);
+                  loadVisualizationCarousel(columnName);
+                  $('#visualizationModal').modal('show');
+              });
+              let columnNames = Object.keys(phase4Data); // Array of column names
+              let currentColumnIndex = 0; // Initialize with the first column index
 
-        // Function to update the modal content
-        function updateModalContent(columnIndex) {
-            let columnName = columnNames[columnIndex];
-            $('#visualizationModalLabel').text(`Column Visualization: ${columnName}`);
-            loadVisualizationCarousel(columnName);
-        }
+              // Function to update the modal content
+              function updateModalContent(columnIndex) {
+                  let columnName = columnNames[columnIndex];
+                  $('#visualizationModalLabel').text(`Column Visualization: ${columnName}`);
+                  loadVisualizationCarousel(columnName);
+              }
 
-        // Load the initial column visualization
-        updateModalContent(currentColumnIndex);
+              // Load the initial column visualization
+              updateModalContent(currentColumnIndex);
 
-        // Event handler for "Previous Column" button
-        $('#prevColumn').on('click', function () {
-            currentColumnIndex = (currentColumnIndex - 1 + columnNames.length) % columnNames.length;
-            updateModalContent(currentColumnIndex);
-        });
+              // Event handler for "Previous Column" button
+              $('#prevColumn').on('click', function () {
+                  currentColumnIndex = (currentColumnIndex - 1 + columnNames.length) % columnNames.length;
+                  updateModalContent(currentColumnIndex);
+              });
 
-        // Event handler for "Next Column" button
-        $('#nextColumn').on('click', function () {
-            currentColumnIndex = (currentColumnIndex + 1) % columnNames.length;
-            updateModalContent(currentColumnIndex);
-        });
+              // Event handler for "Next Column" button
+              $('#nextColumn').on('click', function () {
+                  currentColumnIndex = (currentColumnIndex + 1) % columnNames.length;
+                  updateModalContent(currentColumnIndex);
+              });
 
-        // Function to load visualization carousel
-        function loadVisualizationCarousel(columnName) {
-            var columnData = phase4Data[columnName];
-            var carouselInner = $('#visualizationCarousel .carousel-inner');
-            carouselInner.empty(); // Clear existing items
+              // Function to load visualization carousel
+              function loadVisualizationCarousel(columnName) {
+                  var columnData = phase4Data[columnName];
+                  var carouselInner = $('#visualizationCarousel .carousel-inner');
+                  carouselInner.empty(); // Clear existing items
 
-            if (!columnData || Object.keys(columnData).length === 0) {
-                console.log("No plots for column: " + columnName);
-                carouselInner.append('<div class="carousel-item active"><div class="d-flex justify-content-center align-items-center">No Data Available</div></div>');
-            } else {
-                Object.keys(columnData).forEach(plotType => {
-                    if (plotType === 'description') return; // Skip 'description'
-                    let plotData = columnData[plotType];
-                    if (plotData) {
-                        addCarouselItem(columnName, plotType, plotData);
-                    } else {
-                        console.log("No data for plot type: " + plotType);
-                    }
-                });
-            }
-        }
+                  if (!columnData || Object.keys(columnData).length === 0) {
+                      console.log("No plots for column: " + columnName);
+                      carouselInner.append('<div class="carousel-item active"><div class="d-flex justify-content-center align-items-center">No Data Available</div></div>');
+                  } else {
+                      Object.keys(columnData).forEach(plotType => {
+                          if (plotType === 'description') return; // Skip 'description'
+                          let plotData = columnData[plotType];
+                          if (plotData) {
+                              addCarouselItem(columnName, plotType, plotData);
+                          } else {
+                              console.log("No data for plot type: " + plotType);
+                          }
+                      });
+                  }
+              }
 
-        // Function to add a Plotly graph to the carousel
-        function addCarouselItem(columnName, plotType, plotData) {
-            var carouselInner = $('#visualizationCarousel .carousel-inner');
-            var isActive = carouselInner.children().length === 0 ? 'active' : '';
-            var carouselItem = $('<div class="carousel-item ' + isActive + '"></div>');
-            var plotDivId = columnName + plotType.replace(/\s/g, '') + 'Plot';
-            var plotDiv = $('<div id="' + plotDivId + '"></div>');
+              // Function to add a Plotly graph to the carousel
+              function addCarouselItem(columnName, plotType, plotData) {
+                  var carouselInner = $('#visualizationCarousel .carousel-inner');
+                  var isActive = carouselInner.children().length === 0 ? 'active' : '';
+                  var carouselItem = $('<div class="carousel-item ' + isActive + '"></div>');
+                  var plotDivId = columnName + plotType.replace(/\s/g, '') + 'Plot';
+                  var plotDiv = $('<div id="' + plotDivId + '"></div>');
 
-            carouselItem.append(plotDiv);
-            carouselInner.append(carouselItem);
+                  carouselItem.append(plotDiv);
+                  carouselInner.append(carouselItem);
 
-            try {
-                var plotDataAndLayout = JSON.parse(plotData);
-                Plotly.newPlot(plotDivId, plotDataAndLayout.data, plotDataAndLayout.layout);
-            } catch (error) {
-                console.error("Error parsing plot data for " + plotType + ": ", error);
-            }
-        }
-// Adjust Plotly graph container size on modal open to prevent overflow
-        $('#visualizationModal').on('shown.bs.modal', function () {
-            var plotDivId = $('.plotly-graph-container').children('div').attr('id');
-            if (plotDivId) {
-                var update = {
-                    width: $('#visualizationModal .modal-body').width(),
-                    height: 400
-                };
-                Plotly.relayout(plotDivId, update);
-            }
-        });
-
-
-        //     // Manually adding each type of plot
-        //     if (columnData.hasOwnProperty('histogram')) {
-        //         addCarouselItem(columnName, 'Histogram', columnData['histogram']);
-        //     }
-        //     if (columnData.hasOwnProperty('boxplot')) {
-        //         addCarouselItem(columnName, 'BoxPlot', columnData['boxplot']);
-        //     }
-        //     if (columnData.hasOwnProperty('qq_plot')) {
-        //         addCarouselItem(columnName, 'QQPlot', columnData['qq_plot']);
-        //     }
-        //     if (columnData.hasOwnProperty('cumulative_freq')) {
-        //         addCarouselItem(columnName, 'CumulativeFrequency', columnData['cumulative_freq']);
-        //     }
-        //
-        //     // Add other plots here if needed
-        //     // Example:
-        //     // if (columnData.hasOwnProperty('some_other_plot')) {
-        //     //     addCarouselItem(columnName, 'SomeOtherPlot', columnData['some_other_plot']);
-        //     // }
-        // }
-
-        function getBadgeClass(dtype) {
-            switch (dtype) {
-                case 'string':
-                    return 'badge bg-primary';
-                case 'integer':
-                    return 'badge bg-success';
-                case 'float':
-                    return 'badge bg-info';
-                case 'date':
-                case 'timestamp':
-                    return 'badge bg-warning';
-                default:
-                    return 'badge bg-secondary';
-            }
-        }
-
-        function generateListItems(description, badgeClass) {
-            return Object.entries(description).map(function ([key, value]) {
-                // Check if the value is numerical and has no significant decimal part
-                var displayValue = (typeof value === 'number' && value % 1 === 0) ? parseInt(value) : value;
-                var displayKey = key.length > 20 ? key.substring(0, 15) + '...' : key;
-                return `<li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span class="" title="${key}">${displayKey}</span>
-                    <span class="${badgeClass} text-truncate rounded-pill">${displayValue}</span>
-                </li>`;
-            }).join('');
-        }
-
-        function filterData(data, searchTerm) {
-            return Object.keys(data).reduce(function (result, key) {
-                if (key.toLowerCase().includes(searchTerm)) {
-                    result[key] = data[key];
-                }
-                return result;
-            }, {});
-        }
-        // Assuming 'phase5_data' is a dictionary with Plotly plot JSON data passed from the server
-        var phase5Data = {
-        {
-            phase5_data | tojson | safe
-        }
-    }
-        ;
-
-        // Function to render Plotly plots
-        function renderPlotlyPlots(data) {
-            var plotsContainer = $('#plotly-plots-container');
-            plotsContainer.empty(); // Clear any existing content
-
-            if (data.kmeans_datashader) {
-                var plotDiv = $('<div></div>'); // Create a div for the plot
-                plotsContainer.append(plotDiv); // Append the div to the container
-                Plotly.newPlot(plotDiv[0], data.kmeans_datashader.data, data.kmeans_datashader.layout);
-            }
+                  try {
+                      var plotDataAndLayout = JSON.parse(plotData);
+                      Plotly.newPlot(plotDivId, plotDataAndLayout.data, plotDataAndLayout.layout);
+                  } catch (error) {
+                      console.error("Error parsing plot data for " + plotType + ": ", error);
+                  }
+              }
+      // Adjust Plotly graph container size on modal open to prevent overflow
+              $('#visualizationModal').on('shown.bs.modal', function () {
+                  var plotDivId = $('.plotly-graph-container').children('div').attr('id');
+                  if (plotDivId) {
+                      var update = {
+                          width: $('#visualizationModal .modal-body').width(),
+                          height: 400
+                      };
+                      Plotly.relayout(plotDivId, update);
+                  }
+              });
 
 
-            Object.keys(data).forEach(function (plotName) {
-                var plotData = data[plotName];
-                var plotDiv = $('<div></div>'); // Create a div for the plot
-                plotsContainer.append(plotDiv); // Append the div to the container
+              //     // Manually adding each type of plot
+              //     if (columnData.hasOwnProperty('histogram')) {
+              //         addCarouselItem(columnName, 'Histogram', columnData['histogram']);
+              //     }
+              //     if (columnData.hasOwnProperty('boxplot')) {
+              //         addCarouselItem(columnName, 'BoxPlot', columnData['boxplot']);
+              //     }
+              //     if (columnData.hasOwnProperty('qq_plot')) {
+              //         addCarouselItem(columnName, 'QQPlot', columnData['qq_plot']);
+              //     }
+              //     if (columnData.hasOwnProperty('cumulative_freq')) {
+              //         addCarouselItem(columnName, 'CumulativeFrequency', columnData['cumulative_freq']);
+              //     }
+              //
+              //     // Add other plots here if needed
+              //     // Example:
+              //     // if (columnData.hasOwnProperty('some_other_plot')) {
+              //     //     addCarouselItem(columnName, 'SomeOtherPlot', columnData['some_other_plot']);
+              //     // }
+              // }
 
-                try {
-                    var plotDataAndLayout = JSON.parse(plotData);
-                    Plotly.newPlot(plotDiv[0], plotDataAndLayout.data, plotDataAndLayout.layout);
-                } catch (error) {
-                    console.error("Error rendering plot: " + plotName, error);
-                }
-            });
-        }
+              function getBadgeClass(dtype) {
+                  switch (dtype) {
+                      case 'string':
+                          return 'badge bg-primary';
+                      case 'integer':
+                          return 'badge bg-success';
+                      case 'float':
+                          return 'badge bg-info';
+                      case 'date':
+                      case 'timestamp':
+                          return 'badge bg-warning';
+                      default:
+                          return 'badge bg-secondary';
+                  }
+              }
 
-        // Call the function to render plots
-        renderPlotlyPlots(phase5Data);
-    });
-</script>
-<script>
-    document.getElementById('download-pdf').addEventListener('click', function () {
-        // Define a large custom width and standard A4 height in points (1 point = 1/72 inch)
-        const pageWidth = 6000;
-        const pageHeight = 1000; // Standard A4 height
+              function generateListItems(description, badgeClass) {
+                  return Object.entries(description).map(function ([key, value]) {
+                      // Check if the value is numerical and has no significant decimal part
+                      var displayValue = (typeof value === 'number' && value % 1 === 0) ? parseInt(value) : value;
+                      var displayKey = key.length > 20 ? key.substring(0, 15) + '...' : key;
+                      return `<li class="list-group-item d-flex justify-content-between align-items-center">
+                          <span class="" title="${key}">${displayKey}</span>
+                          <span class="${badgeClass} text-truncate rounded-pill">${displayValue}</span>
+                      </li>`;
+                  }).join('');
+              }
 
-        // Create a new jsPDF instance with custom dimensions
-        const doc = new jspdf.jsPDF({
-            orientation: 'landscape',
-            unit: 'pt',
-            format: [pageWidth, pageHeight]
-        });
+              function filterData(data, searchTerm) {
+                  return Object.keys(data).reduce(function (result, key) {
+                      if (key.toLowerCase().includes(searchTerm)) {
+                          result[key] = data[key];
+                      }
+                      return result;
+                  }, {});
+              }
+              // Assuming 'phase5_data' is a dictionary with Plotly plot JSON data passed from the server
+              var phase5Data = {
+              {
+                  phase5_data | tojson | safe
+              }
+          }
+              ;
 
-        // Use autoTable to convert the HTML table to a PDF table
-        doc.autoTable({
-            html: '#maintable',
-            theme: 'grid',
-            tableWidth: 'wrap',
+              // Function to render Plotly plots
+              function renderPlotlyPlots(data) {
+                  var plotsContainer = $('#plotly-plots-container');
+                  plotsContainer.empty(); // Clear any existing content
+
+                  if (data.kmeans_datashader) {
+                      var plotDiv = $('<div></div>'); // Create a div for the plot
+                      plotsContainer.append(plotDiv); // Append the div to the container
+                      Plotly.newPlot(plotDiv[0], data.kmeans_datashader.data, data.kmeans_datashader.layout);
+                  }
+
+
+                  Object.keys(data).forEach(function (plotName) {
+                      var plotData = data[plotName];
+                      var plotDiv = $('<div></div>'); // Create a div for the plot
+                      plotsContainer.append(plotDiv); // Append the div to the container
+
+                      try {
+                          var plotDataAndLayout = JSON.parse(plotData);
+                          Plotly.newPlot(plotDiv[0], plotDataAndLayout.data, plotDataAndLayout.layout);
+                      } catch (error) {
+                          console.error("Error rendering plot: " + plotName, error);
+                      }
+                  });
+              }
+
+              // Call the function to render plots
+              renderPlotlyPlots(phase5Data);
+          });
+    </script>
+    <script>
+      document
+        .getElementById("download-pdf")
+        .addEventListener("click", function () {
+          // Define a large custom width and standard A4 height in points (1 point = 1/72 inch)
+          const pageWidth = 6000;
+          const pageHeight = 1000; // Standard A4 height
+
+          // Create a new jsPDF instance with custom dimensions
+          const doc = new jspdf.jsPDF({
+            orientation: "landscape",
+            unit: "pt",
+            format: [pageWidth, pageHeight],
+          });
+
+          // Use autoTable to convert the HTML table to a PDF table
+          doc.autoTable({
+            html: "#maintable",
+            theme: "grid",
+            tableWidth: "wrap",
             horizontalPageBreak: true,
+          });
+
+          // Save the PDF
+          doc.save("table.pdf");
         });
-
-        // Save the PDF
-        doc.save('table.pdf');
-    });
-</script>
-
-
-</body>
+    </script>
+  </body>
 </html>

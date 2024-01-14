@@ -8,12 +8,13 @@ import json
 import os
 import pickle
 import re
+import unicodedata
 from collections import defaultdict
 from datetime import datetime
 from importlib import resources
 from io import BytesIO
 from itertools import product
-from typing import Union, Any
+from typing import Any, Union
 
 import datashader as ds
 import dateparser
@@ -27,13 +28,12 @@ import psutil
 import pycountry
 import spacy
 import textstat
-import unicodedata
 from bs4 import BeautifulSoup
 from cssmin import cssmin
 from jinja2 import Environment, FileSystemLoader
 from jsmin import jsmin
 from matplotlib import pyplot as plt
-from plotly.graph_objs import Histogram, Box, Scatter, Figure, Bar
+from plotly.graph_objs import Bar, Box, Figure, Histogram, Scatter
 from scipy import stats
 from scipy.stats import entropy
 from sklearn.decomposition import PCA
@@ -53,15 +53,15 @@ def minify_css(css_content):
 
 
 def minify_html(html_content):
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, "html.parser")
 
     # Minify inline JavaScript
-    for script in soup.find_all('script'):
+    for script in soup.find_all("script"):
         if script.string:
             script.string = minify_js(script.string)
 
     # Minify inline CSS
-    for style in soup.find_all('style'):
+    for style in soup.find_all("style"):
         if style.string:
             style.string = minify_css(style.string)
 
@@ -70,11 +70,11 @@ def minify_html(html_content):
 
 
 def compress_html(html_content, output_filepath):
-    with gzip.open(output_filepath + '.gz', 'wt', encoding='utf-8') as f:
+    with gzip.open(output_filepath + ".gz", "wt", encoding="utf-8") as f:
         f.write(html_content)
 
 
-nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load("en_core_web_sm")
 # Path to the current script (profiler.py)
 current_file_path = os.path.abspath(__file__)
 
@@ -82,38 +82,46 @@ current_file_path = os.path.abspath(__file__)
 current_directory = os.path.dirname(current_file_path)
 
 # Path to the fasttext model relative to the current script
-model_path = os.path.join(current_directory, 'data', 'lid.176.ftz')
+model_path = os.path.join(current_directory, "data", "lid.176.ftz")
 
 # Load the model
 
 # Load the fasttext model (make sure to provide the correct path to the model file)
 with contextlib.redirect_stderr(io.StringIO()):
     ft_model = fasttext.load_model(model_path)
-pd.set_option('display.max_columns', None)
+pd.set_option("display.max_columns", None)
 # Compile the regex pattern outside of the function
-non_word_pattern = re.compile(r'\W+')
+non_word_pattern = re.compile(r"\W+")
 
 # Date Components
-years = ['%Y', '%y']
-months = ['%m', '%b', '%B']
-days = ['%d', '%j']
-date_separators = ['/', '-', '.', ' ']
+years = ["%Y", "%y"]
+months = ["%m", "%b", "%B"]
+days = ["%d", "%j"]
+date_separators = ["/", "-", ".", " "]
 
 # Time Components
-hours = ['%H', '%I']
-minutes = ['%M']
-seconds = ['%S']
-fractions = ['', '%f']
-am_pm = ['', '%p']
-time_separators = [':', '']
-timezones = ['', '%Z', '%z']
+hours = ["%H", "%I"]
+minutes = ["%M"]
+seconds = ["%S"]
+fractions = ["", "%f"]
+am_pm = ["", "%p"]
+time_separators = [":", ""]
+timezones = ["", "%Z", "%z"]
 
 # Generate permutations for date and time
 date_time_formats = set()
 for y, m, d, dss in product(years, months, days, date_separators):
     date_format = f"{y}{ds}{m}{dss}{d}".strip()
-    for h, mins, s, fs, ampm, ts1, ts2, tz in product(hours, minutes, seconds, fractions, am_pm, time_separators,
-                                                      time_separators, timezones):
+    for h, mins, s, fs, ampm, ts1, ts2, tz in product(
+        hours,
+        minutes,
+        seconds,
+        fractions,
+        am_pm,
+        time_separators,
+        time_separators,
+        timezones,
+    ):
         time_format = f"{h}{ts1}{mins}{ts2}{s}{fs}{ampm}{tz}".strip()
         # Combine date and time formats
         combined_format = f"{date_format} {time_format}".strip()
@@ -123,12 +131,12 @@ for y, m, d, dss in product(years, months, days, date_separators):
 date_time_formats_list = sorted(list(date_time_formats))
 
 # Global cache for successful formats and their frequencies
-format_cache_file = 'format_cache.pkl'
+format_cache_file = "format_cache.pkl"
 format_cache = defaultdict(int)  # Default to 0 for new formats
 
 # Load format cache if exists
 if os.path.exists(format_cache_file):
-    with open(format_cache_file, 'rb') as f:
+    with open(format_cache_file, "rb") as f:
         format_cache = pickle.load(f)
 
 print(format_cache)
@@ -139,15 +147,24 @@ def validate_date(dates):
     year = dates.dt.year
     month = dates.dt.month
     day = dates.dt.day
-    return ((1900 <= year) & (year <= 2030) & (1 <= month) & (month <= 12) & (1 <= day) & (day <= 31)).all()
+    return (
+        (1900 <= year)
+        & (year <= 2030)
+        & (1 <= month)
+        & (month <= 12)
+        & (1 <= day)
+        & (day <= 31)
+    ).all()
 
 
 def parse_dates_with_format(column, fmt):
     """Parse dates using a specific format, including timezones."""
     try:
-        parsed_dates = pd.to_datetime(column, format=fmt, errors='raise', utc=True)
+        parsed_dates = pd.to_datetime(column, format=fmt, errors="raise", utc=True)
         if validate_date(parsed_dates):
-            return parsed_dates.dt.tz_convert(None) if parsed_dates.dt.tz else parsed_dates
+            return (
+                parsed_dates.dt.tz_convert(None) if parsed_dates.dt.tz else parsed_dates
+            )
     except (ValueError, TypeError):
         return None
 
@@ -157,22 +174,22 @@ def try_parse_date(column, date_time_formats_list):
 
     # Common formats
     common_date_formats_list = [
-        '%Y-%m-%d %H:%M:%S.%f',  # Example: 2023-12-22 04:22:30.615016
-        '%Y-%m-%d %H:%M:%S',  # Example: 2023-12-22 04:22:30
-        '%Y-%m-%d',  # Example: 2023-12-22
-        '%H:%M:%S',  # Example: 04:22:30
-        '%Y/%m/%d %H:%M:%S',  # Example: 2023/12/22 04:22:30
-        '%Y/%m/%d',  # Example: 2023/12/22
-        '%m/%d/%Y %H:%M:%S',  # Example: 12/22/2023 04:22:30 (American style)
-        '%m/%d/%Y',  # Example: 12/22/2023 (American style)
-        '%d/%m/%Y %H:%M:%S',  # Example: 22/12/2023 04:22:30 (European style)
-        '%d/%m/%Y',  # Example: 22/12/2023 (European style)
-        '%Y %B %d %H:%M:%S',  # Example: 2023 December 22 04:22:30
-        '%Y %B %d',  # Example: 2023 December 22
-        '%Y %b %d %H:%M:%S',  # Example: 2023 Dec 22 04:22:30
-        '%Y %b %d',  # Example: 2023 Dec 22
-        '%Y %m %d %H:%M:%S',  # Example: 2023 12 22 04:22:30
-        '%Y %m %d'  # Example: 2023 12 22
+        "%Y-%m-%d %H:%M:%S.%f",  # Example: 2023-12-22 04:22:30.615016
+        "%Y-%m-%d %H:%M:%S",  # Example: 2023-12-22 04:22:30
+        "%Y-%m-%d",  # Example: 2023-12-22
+        "%H:%M:%S",  # Example: 04:22:30
+        "%Y/%m/%d %H:%M:%S",  # Example: 2023/12/22 04:22:30
+        "%Y/%m/%d",  # Example: 2023/12/22
+        "%m/%d/%Y %H:%M:%S",  # Example: 12/22/2023 04:22:30 (American style)
+        "%m/%d/%Y",  # Example: 12/22/2023 (American style)
+        "%d/%m/%Y %H:%M:%S",  # Example: 22/12/2023 04:22:30 (European style)
+        "%d/%m/%Y",  # Example: 22/12/2023 (European style)
+        "%Y %B %d %H:%M:%S",  # Example: 2023 December 22 04:22:30
+        "%Y %B %d",  # Example: 2023 December 22
+        "%Y %b %d %H:%M:%S",  # Example: 2023 Dec 22 04:22:30
+        "%Y %b %d",  # Example: 2023 Dec 22
+        "%Y %m %d %H:%M:%S",  # Example: 2023 12 22 04:22:30
+        "%Y %m %d",  # Example: 2023 12 22
     ]
 
     # Check cache first and sort by frequency
@@ -192,7 +209,7 @@ def try_parse_date(column, date_time_formats_list):
 
     # Fallback to default parsing with timezone handling
     try:
-        parsed_dates = pd.to_datetime(column, errors='coerce', utc=True)
+        parsed_dates = pd.to_datetime(column, errors="coerce", utc=True)
         return parsed_dates.dt.tz_convert(None) if parsed_dates.dt.tz else parsed_dates
     except (ValueError, TypeError):
         return pd.Series([pd.NaT] * len(column))
@@ -201,21 +218,24 @@ def try_parse_date(column, date_time_formats_list):
 def custom_data_type(col):
     """Determine the custom data type of a column."""
     if col.isnull().all():
-        return 'empty'
+        return "empty"
 
     if pd.api.types.is_numeric_dtype(col):
         if (col.dropna() % 1 == 0).all():
-            return 'integer'
-        return 'float'
+            return "integer"
+        return "float"
 
     if pd.api.types.is_string_dtype(col):
         parsed_dates = try_parse_date(col.dropna(), date_time_formats_list)
         if not parsed_dates.isnull().all():
-            is_date = ((parsed_dates.dt.hour == 0) & (parsed_dates.dt.minute == 0) & (
-                    parsed_dates.dt.second == 0)).all()
-            return 'date' if is_date else 'timestamp'
+            is_date = (
+                (parsed_dates.dt.hour == 0)
+                & (parsed_dates.dt.minute == 0)
+                & (parsed_dates.dt.second == 0)
+            ).all()
+            return "date" if is_date else "timestamp"
 
-    return 'string'
+    return "string"
 
 
 # Custom function to determine the data type of a column
@@ -223,27 +243,30 @@ def custom_data_type(col):
 
 def contains_non_english_characters(col_data):
     # Vectorized operation for non-ASCII character detection
-    return col_data.str.contains(r'[^\x00-\x7F]', na=False).any()
+    return col_data.str.contains(r"[^\x00-\x7F]", na=False).any()
 
 
 @functools.lru_cache(maxsize=128)
 def detect_language_with_confidence(text):
     # Ensure that text is a string
     if not isinstance(text, str):
-        return [('English', 100)]
+        return [("English", 100)]
 
     # Check for non-Latin characters using unicodedata
-    if any(unicodedata.category(char).startswith('L') and not unicodedata.name(char).startswith('LATIN') for char in
-           text):
+    if any(
+        unicodedata.category(char).startswith("L")
+        and not unicodedata.name(char).startswith("LATIN")
+        for char in text
+    ):
         # Clean the text data and perform language detection
-        cleaned_text = re.sub(r'\W+', ' ', text)
+        cleaned_text = re.sub(r"\W+", " ", text)
         predictions = ft_model.predict(cleaned_text, k=1)
         languages = predictions[0]
         probabilities = predictions[1]
         full_language_names = []
 
         for lang_code, prob in zip(languages, probabilities):
-            lang_code = lang_code.replace('__label__', '')
+            lang_code = lang_code.replace("__label__", "")
             try:
                 language = pycountry.languages.get(alpha_2=lang_code)
                 full_language_names.append((language.name, round(prob * 100, 2)))
@@ -254,7 +277,7 @@ def detect_language_with_confidence(text):
         return full_language_names
     else:
         # If text contains only Latin characters, assume it's English
-        return [('English', 100)]
+        return [("English", 100)]
 
 
 def calculate_entropy(column: pd.Series) -> float:
@@ -286,7 +309,13 @@ def is_date_or_timestamp(s):
     try:
         parsed_date = dateparser.parse(s)
         if parsed_date:
-            return 'date' if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0 else 'timestamp'
+            return (
+                "date"
+                if parsed_date.hour == 0
+                and parsed_date.minute == 0
+                and parsed_date.second == 0
+                else "timestamp"
+            )
     except Exception as e:
         print(f"Error parsing date: {e}")
     return None
@@ -300,11 +329,11 @@ def identify_column_type(col):
     unique_results = results.unique()
 
     # If all elements are identified as 'date', return 'date column'
-    if len(unique_results) == 1 and unique_results[0] == 'date':
-        return 'date column'
+    if len(unique_results) == 1 and unique_results[0] == "date":
+        return "date column"
     # If all elements are identified as 'timestamp', return 'timestamp column'
-    elif len(unique_results) == 1 and unique_results[0] == 'timestamp':
-        return 'timestamp column'
+    elif len(unique_results) == 1 and unique_results[0] == "timestamp":
+        return "timestamp column"
 
     # Function to create histogram
 
@@ -325,12 +354,12 @@ def create_bar_chart(data, title, xaxis_title, yaxis_title):
 
 # Function to convert matplotlib figure to Plotly
 def clean_text(text):
-    """ Remove non-alphabetic characters and extra spaces. """
-    return re.sub(r'[^a-zA-Z\s]', '', text).strip()
+    """Remove non-alphabetic characters and extra spaces."""
+    return re.sub(r"[^a-zA-Z\s]", "", text).strip()
 
 
 def is_valid_text(text, min_word_count=5):
-    """ Check if the text has the minimum number of words. """
+    """Check if the text has the minimum number of words."""
     return len(text.split()) >= min_word_count  # More efficient word count
 
 
@@ -338,11 +367,11 @@ def is_valid_text(text, min_word_count=5):
 def img_to_data_uri(fig):
     """Convert matplotlib figure to data URI for Plotly"""
     buf = BytesIO()
-    fig.savefig(buf, format='png')
+    fig.savefig(buf, format="png")
     buf.seek(0)
-    img_data = base64.b64encode(buf.read()).decode('utf-8')
+    img_data = base64.b64encode(buf.read()).decode("utf-8")
     buf.close()
-    return 'data:image/png;base64,' + img_data
+    return "data:image/png;base64," + img_data
 
 
 def round_if_float(value):
@@ -398,11 +427,11 @@ def fig_to_json(fig):
 def get_confidence_color(confidence):
     # Assuming confidence is a percentage
     if confidence >= 85:
-        return '#dc3545'  # Red for high confidence
+        return "#dc3545"  # Red for high confidence
     elif confidence >= 70:
-        return '#007bff'  # Blue for medium confidence
+        return "#007bff"  # Blue for medium confidence
     else:
-        return '#28a745'  # Green for low confidence
+        return "#28a745"  # Green for low confidence
 
 
 def convert_to_serializable(val):
@@ -435,9 +464,18 @@ def parallel_nltk_processing(documents):
 
 
 class DataProfile:
-    def __init__(self, file_path, env_name='dummy', schema_name='dummy_schema', table_name='dummy_table',
-                 output_folder='.', skip_col_stats='N', skip_table_stats='N', sample_size_for_plots=None,
-                 n_cluster_for_kmeans=3):
+    def __init__(
+        self,
+        file_path,
+        env_name="dummy",
+        schema_name="dummy_schema",
+        table_name="dummy_table",
+        output_folder=".",
+        skip_col_stats="N",
+        skip_table_stats="N",
+        sample_size_for_plots=None,
+        n_cluster_for_kmeans=3,
+    ):
         self.n_cluster_for_kmeans = n_cluster_for_kmeans
         self.sample_size = sample_size_for_plots
         self.skip_col_stats = skip_col_stats
@@ -494,16 +532,25 @@ class DataProfile:
         #     'WP$': 'Possessive wh-pronoun',
         #     'WRB': 'Wh-adverb'}
         # Set up Jinja2 environment
-        self.env = Environment(loader=FileSystemLoader('.'))
-        with resources.path('Data_Profiler_TCS', 'jinja_template.html') as template_path:
+        self.env = Environment(loader=FileSystemLoader("."))
+        with resources.path(
+            "Data_Profiler_TCS", "jinja_template.html"
+        ) as template_path:
             # Now, set the loader with the directory of the template
             template_directory = template_path.parent
             self.env = Environment(loader=FileSystemLoader(str(template_directory)))
-            self.template_name = 'jinja_template.html'
+            self.template_name = "jinja_template.html"
         self.output_folder = output_folder
-        self.output_file_name = os.path.join(self.output_folder,
-                                             'data_profiling_report_' + self.schema_name + "_" + self.table_name + '_' + datetime.now().strftime(
-                                                 "%d%m%Y_%H_%M_%S") + '.html')
+        self.output_file_name = os.path.join(
+            self.output_folder,
+            "data_profiling_report_"
+            + self.schema_name
+            + "_"
+            + self.table_name
+            + "_"
+            + datetime.now().strftime("%d%m%Y_%H_%M_%S")
+            + ".html",
+        )
         self.custom_data_types = {}
 
     # Custom function to determine the data type of a column
@@ -511,24 +558,27 @@ class DataProfile:
     def first_phase(self):
         date_time: str = datetime.now().strftime("%m/%d/%Y %I:%M %p")
         data_volume: float = os.path.getsize(self.file_path) / 1024
-        total_ram: Union[float, Any] = psutil.virtual_memory().total / (1024 ** 3)
-        available_ram: Union[float, Any] = psutil.virtual_memory().available / (1024 ** 3)
-        chunksize = 10 ** 6 if data_volume > available_ram else None
+        total_ram: Union[float, Any] = psutil.virtual_memory().total / (1024**3)
+        available_ram: Union[float, Any] = psutil.virtual_memory().available / (1024**3)
+        chunksize = 10**6 if data_volume > available_ram else None
         if chunksize:
-            df_chunks = pd.read_csv(self.file_path, chunksize=chunksize, low_memory=False)
+            df_chunks = pd.read_csv(
+                self.file_path, chunksize=chunksize, low_memory=False
+            )
             self.df = pd.concat(df_chunks, ignore_index=True)
         else:
             self.df = pd.read_csv(self.file_path, low_memory=False)
-        if 'Unnamed: 0' in self.df.columns:
-            self.df = self.df.drop('Unnamed: 0', axis=1)
+        if "Unnamed: 0" in self.df.columns:
+            self.df = self.df.drop("Unnamed: 0", axis=1)
         for column in self.df.columns:
             # Determine the custom data type
             col_type = custom_data_type(self.df[column])
 
             # Convert to integer if identified as a float but effectively an integer
-            if col_type == 'float' and (self.df[column].dropna() % 1 == 0).all():
-                self.df[column] = pd.to_numeric(self.df[column], downcast='integer')
-                col_type = custom_data_type(self.df[column])  # Recheck the type after conversion
+            if col_type == "float" and (self.df[column].dropna() % 1 == 0).all():
+                self.df[column] = pd.to_numeric(self.df[column], downcast="integer")
+                # Recheck the type after conversion
+                col_type = custom_data_type(self.df[column])
 
             self.custom_data_types[column] = col_type
 
@@ -542,17 +592,17 @@ class DataProfile:
         # random_rows_transposed = random_rows_df.T
         memory_usage = self.df.memory_usage(deep=True).sum() / 1024
         self.phase_1_dict = {
-            'Environment': self.env_name,
-            'Schema Name': self.schema_name,
-            'Table Name': self.table_name,
-            'Date/Time': date_time,
-            'Has Duplicates': 'Yes' if has_duplicates else 'No',
-            'Memory Usage in server': f'{memory_usage:.1f} KB',
-            'Data volume': f'{data_volume:.1f} KB',
-            'Total RAM in server': f'{total_ram:.1f} GB',
-            'Available RAM in server': f'{available_ram:.1f} GB',
-            'Total Row Count': self.df.shape[0],
-            'Total Column Count': self.df.shape[1]
+            "Environment": self.env_name,
+            "Schema Name": self.schema_name,
+            "Table Name": self.table_name,
+            "Date/Time": date_time,
+            "Has Duplicates": "Yes" if has_duplicates else "No",
+            "Memory Usage in server": f"{memory_usage:.1f} KB",
+            "Data volume": f"{data_volume:.1f} KB",
+            "Total RAM in server": f"{total_ram:.1f} GB",
+            "Available RAM in server": f"{available_ram:.1f} GB",
+            "Total Row Count": self.df.shape[0],
+            "Total Column Count": self.df.shape[1],
         }
 
     def second_phase(self):
@@ -573,24 +623,26 @@ class DataProfile:
             col_data = self.df[col].dropna()
             data_type = self.custom_data_types[col]
             self.categorical_info[col] = categorical_confidence(col_data, total_rows)
-            if data_type == 'integer':
+            if data_type == "integer":
                 int_columns.append(col)
-            elif data_type == 'float':
+            elif data_type == "float":
                 float_columns.append(col)
-                decimals = col_data.apply(lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0)
+                decimals = col_data.apply(
+                    lambda x: len(str(x).split(".")[1]) if "." in str(x) else 0
+                )
                 max_decimal_places_col = decimals.max()
                 max_decimal_places = max(max_decimal_places, max_decimal_places_col)
                 if max_decimal_places_col > 6:
                     double_columns.append(col)
-            elif data_type == 'string':
+            elif data_type == "string":
                 string_columns.append(col)
                 max_length_in_col = col_data.astype(str).map(len).max()
                 max_string_length = max(max_string_length, max_length_in_col)
                 # if categorical_confidence(col_data, total_rows) > 50:
                 #     categorical_info[col] = categorical_confidence(col_data, total_rows)
-            elif data_type == 'date':
+            elif data_type == "date":
                 date_columns.append(col)
-            elif data_type == 'timestamp':
+            elif data_type == "timestamp":
                 timestamp_columns.append(col)
             if col_data.empty:
                 total_zero_percent_count += 1
@@ -603,18 +655,18 @@ class DataProfile:
 
         self.phase_2_dict = {
             # 'Total Data Type Count': unique_data_types_count,
-            'Int Column Count': len(int_columns),
-            'Float Column Count': len(float_columns),
-            'String Column Count': len(string_columns),
-            'Date Column Count': len(date_columns),
-            'Timestamp Column Count': len(timestamp_columns),
-            'Double Column Count': len(double_columns),
-            'Maximum String Length': max_string_length,
-            'Maximum Decimal Places': max_decimal_places,
-            'Total Null Record Count': total_null_count,
-            'Total Not Null Record Count': total_not_null_count,
-            'Count of columns with no data': total_zero_percent_count,
-            'Count of Columns with 100% data': total_hundred_percent_count
+            "Int Column Count": len(int_columns),
+            "Float Column Count": len(float_columns),
+            "String Column Count": len(string_columns),
+            "Date Column Count": len(date_columns),
+            "Timestamp Column Count": len(timestamp_columns),
+            "Double Column Count": len(double_columns),
+            "Maximum String Length": max_string_length,
+            "Maximum Decimal Places": max_decimal_places,
+            "Total Null Record Count": total_null_count,
+            "Total Not Null Record Count": total_not_null_count,
+            "Count of columns with no data": total_zero_percent_count,
+            "Count of Columns with 100% data": total_hundred_percent_count,
         }
 
     def third_phase(self):
@@ -635,58 +687,79 @@ class DataProfile:
                 "NULL Record Count": null_count,
                 "Percentage of NULL Values": round(null_count / total_count * 100, 2),
                 "NOT NULL Record Count": non_null_count,
-                "Percentage of NOT NULL Values": round(non_null_count / total_count * 100, 2),
+                "Percentage of NOT NULL Values": round(
+                    non_null_count / total_count * 100, 2
+                ),
                 "Number of Distinct Values": unique_values,
-                "Uniqueness Index (unique/total)": round(unique_values / total_count * 100, 2),
-                "Top 10 Values": top_10_values
+                "Uniqueness Index (unique/total)": round(
+                    unique_values / total_count * 100, 2
+                ),
+                "Top 10 Values": top_10_values,
             }
 
             # Additional metrics for numeric and string data
-            if data_type == 'integer' or data_type == 'float':
+            if data_type == "integer" or data_type == "float":
                 column_info["Median"] = round(col_data.median(), 2)
-                if data_type == 'float':
-                    max_decimal_places = col_data.dropna().apply(
-                        lambda x: len(str(x).split('.')[1]) if '.' in str(x) else 0).max()
+                if data_type == "float":
+                    max_decimal_places = (
+                        col_data.dropna()
+                        .apply(
+                            lambda x: len(str(x).split(".")[1]) if "." in str(x) else 0
+                        )
+                        .max()
+                    )
                     column_info["Max Decimal Precision"] = max_decimal_places
 
-            if data_type == 'string':
+            if data_type == "string":
                 column_info["Max String Length"] = col_data.astype(str).map(len).max()
                 # non_english_chars = any(re.search(r'[^\x00-\x7F]+', str(x)) for x in col_data)
                 non_english_chars = contains_non_english_characters(col_data)
-                column_info["Contains Non-English Characters"] = contains_non_english_characters(col_data)
+                column_info[
+                    "Contains Non-English Characters"
+                ] = contains_non_english_characters(col_data)
 
                 if non_english_chars:
                     unique_texts = col_data.dropna().unique().tolist()
-                    languages_with_confidence = [detect_language_with_confidence(text) for text in unique_texts]
+                    languages_with_confidence = [
+                        detect_language_with_confidence(text) for text in unique_texts
+                    ]
                     # Flatten the list of lists to a single list of tuples
-                    languages_with_confidence = [item for sublist in languages_with_confidence for item in sublist]
+                    languages_with_confidence = [
+                        item
+                        for sublist in languages_with_confidence
+                        for item in sublist
+                    ]
 
                     # Sort the list of tuples
                     column_info["Languages Detected with Confidence"] = sorted(
-                        {x[0]: x for x in languages_with_confidence}.values(), key=lambda x: x[1], reverse=True)[:5]
+                        {x[0]: x for x in languages_with_confidence}.values(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    )[:5]
                 else:
-                    column_info["Languages Detected with Confidence"] = [("English", 100)]
+                    column_info["Languages Detected with Confidence"] = [
+                        ("English", 100)
+                    ]
 
                     # Updated timezone handling for datetime columns
             if "date" in data_type or "timestamp" in data_type:
-                col_data = pd.to_datetime(col_data, errors='coerce', utc=True)
+                col_data = pd.to_datetime(col_data, errors="coerce", utc=True)
                 col_data = col_data.dt.tz_convert(None) if col_data.dt.tz else col_data
                 column_info["Min Date/Time Value"] = col_data.min()
                 column_info["Max Date/Time Value"] = col_data.max()
 
             self.phase_3_list.append(column_info)
 
-
     def fourth_phase(self):
-        if self.skip_col_stats == 'Y':
+        if self.skip_col_stats == "Y":
             return {}
         self.phase_4_dict = {}
 
         # Downsize numerical columns and convert to float32 or int32
-        for col in self.df.select_dtypes(include=['float64']).columns:
-            self.df[col] = self.df[col].astype('float32')
-        for col in self.df.select_dtypes(include=['int64']).columns:
-            self.df[col] = self.df[col].astype('int32')
+        for col in self.df.select_dtypes(include=["float64"]).columns:
+            self.df[col] = self.df[col].astype("float32")
+        for col in self.df.select_dtypes(include=["int64"]).columns:
+            self.df[col] = self.df[col].astype("int32")
 
         for col in self.df.columns:
             # Use sampled data for large datasets
@@ -697,39 +770,44 @@ class DataProfile:
                 data = self.df[col].dropna()
 
             dtype = self.custom_data_types[col]
-            column_info = {'description': {}}
+            column_info = {"description": {}}
             # Calculating descriptive statistics
             descriptive_stats = data.describe()
             # Mapping the original descriptive statistics keys to more meaningful names
             meaningful_keys = {
-                'count': 'Total Count',
-                'mean': 'Average',
-                'std': 'Standard Deviation',
-                'min': 'Minimum Value',
-                '25%': '25th Percentile',
-                '50%': 'Median (50th Percentile)',
-                '75%': '75th Percentile',
-                'max': 'Maximum Value'
+                "count": "Total Count",
+                "mean": "Average",
+                "std": "Standard Deviation",
+                "min": "Minimum Value",
+                "25%": "25th Percentile",
+                "50%": "Median (50th Percentile)",
+                "75%": "75th Percentile",
+                "max": "Maximum Value",
             }
             # Updating the description dictionary with more meaningful keys
-            column_info['description'] = {
-                meaningful_keys.get(k, k): round_if_float(v) for k, v in descriptive_stats.to_dict().items()
+            column_info["description"] = {
+                meaningful_keys.get(k, k): round_if_float(v)
+                for k, v in descriptive_stats.to_dict().items()
             }
 
-            if dtype in ['integer', 'float']:
+            if dtype in ["integer", "float"]:
                 # Basic statistical analysis
                 skewness = round_if_float(data.skew())
                 kurtosis = round_if_float(data.kurtosis())
                 outlier_percentage = round_if_float(calculate_outlier_percentage(data))
 
-                column_info['description'].update({
-                    'skewness': skewness,
-                    'kurtosis': kurtosis,
-                    'outlier %': outlier_percentage
-                })
+                column_info["description"].update(
+                    {
+                        "skewness": skewness,
+                        "kurtosis": kurtosis,
+                        "outlier %": outlier_percentage,
+                    }
+                )
                 # Preparing data for plots
                 fig_hist = Figure(data=[Histogram(x=data)])
-                fig_hist.update_layout(title=f"Histogram of {col}", xaxis_title=col, yaxis_title="Count")
+                fig_hist.update_layout(
+                    title=f"Histogram of {col}", xaxis_title=col, yaxis_title="Count"
+                )
 
                 fig_box = Figure(data=[Box(y=data)])
                 fig_box.update_layout(title=f"Box Plot of {col}", yaxis_title=col)
@@ -740,11 +818,20 @@ class DataProfile:
                 ordered_values = qq_data[0][1]
 
                 # Create scatter plot for the Q-Q plot data
-                qq_scatter = go.Scatter(x=theoretical_quantiles, y=ordered_values, mode='markers', name='Data')
+                qq_scatter = go.Scatter(
+                    x=theoretical_quantiles,
+                    y=ordered_values,
+                    mode="markers",
+                    name="Data",
+                )
 
                 # Create a line representing the ideal normal distribution
-                line = go.Scatter(x=theoretical_quantiles, y=qq_data[1][1] + qq_data[1][0] * theoretical_quantiles,
-                                  mode='lines', name='Normal Distribution')
+                line = go.Scatter(
+                    x=theoretical_quantiles,
+                    y=qq_data[1][1] + qq_data[1][0] * theoretical_quantiles,
+                    mode="lines",
+                    name="Normal Distribution",
+                )
 
                 # Create the figure and add traces
                 fig = go.Figure()
@@ -752,62 +839,129 @@ class DataProfile:
                 fig.add_trace(line)
 
                 # Update the layout
-                fig.update_layout(title=f'Q-Q Plot of {col}',
-                                  xaxis_title='Theoretical Quantiles',
-                                  yaxis_title='Ordered Values')
+                fig.update_layout(
+                    title=f"Q-Q Plot of {col}",
+                    xaxis_title="Theoretical Quantiles",
+                    yaxis_title="Ordered Values",
+                )
 
                 sorted_data = np.sort(data)
                 cum_freq = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
                 fig_cum_freq = Figure(data=[Scatter(x=sorted_data, y=cum_freq)])
-                fig_cum_freq.update_layout(title=f"Cumulative Frequency Plot of {col}", xaxis_title=col,
-                                           yaxis_title="Cumulative Frequency")
+                fig_cum_freq.update_layout(
+                    title=f"Cumulative Frequency Plot of {col}",
+                    xaxis_title=col,
+                    yaxis_title="Cumulative Frequency",
+                )
 
                 # Converting Plotly figures to JSON
-                column_info['histogram'] = json.dumps(fig_hist, cls=plotly.utils.PlotlyJSONEncoder)
-                column_info['boxplot'] = json.dumps(fig_box, cls=plotly.utils.PlotlyJSONEncoder)
-                column_info['qq_plot'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-                column_info['cumulative_freq'] = json.dumps(fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder)
+                column_info["histogram"] = json.dumps(
+                    fig_hist, cls=plotly.utils.PlotlyJSONEncoder
+                )
+                column_info["boxplot"] = json.dumps(
+                    fig_box, cls=plotly.utils.PlotlyJSONEncoder
+                )
+                column_info["qq_plot"] = json.dumps(
+                    fig, cls=plotly.utils.PlotlyJSONEncoder
+                )
+                column_info["cumulative_freq"] = json.dumps(
+                    fig_cum_freq, cls=plotly.utils.PlotlyJSONEncoder
+                )
 
-
-            elif dtype == 'date' or dtype == 'timestamp':
+            elif dtype == "date" or dtype == "timestamp":
                 try:
-                    date_data = pd.to_datetime(data, errors='coerce')
+                    date_data = pd.to_datetime(data, errors="coerce")
                     # Creating histograms for different time aspects
-                    fig_year = create_histogram(date_data.dt.year, f"Year Distribution in {col}", "Year", "Count")
-                    fig_month = create_histogram(date_data.dt.month, f"Month Distribution in {col}", "Month", "Count")
-                    fig_day = create_histogram(date_data.dt.day, f"Day Distribution in {col}", "Day", "Count")
-                    fig_hour = create_histogram(date_data.dt.hour, f"Hour Distribution in {col}", "Hour", "Count")
-                    fig_minute = create_histogram(date_data.dt.minute, f"Minute Distribution in {col}", "Minute",
-                                                  "Count")
-                    fig_second = create_histogram(date_data.dt.second, f"Second Distribution in {col}", "Second",
-                                                  "Count")
+                    fig_year = create_histogram(
+                        date_data.dt.year,
+                        f"Year Distribution in {col}",
+                        "Year",
+                        "Count",
+                    )
+                    fig_month = create_histogram(
+                        date_data.dt.month,
+                        f"Month Distribution in {col}",
+                        "Month",
+                        "Count",
+                    )
+                    fig_day = create_histogram(
+                        date_data.dt.day, f"Day Distribution in {col}", "Day", "Count"
+                    )
+                    fig_hour = create_histogram(
+                        date_data.dt.hour,
+                        f"Hour Distribution in {col}",
+                        "Hour",
+                        "Count",
+                    )
+                    fig_minute = create_histogram(
+                        date_data.dt.minute,
+                        f"Minute Distribution in {col}",
+                        "Minute",
+                        "Count",
+                    )
+                    fig_second = create_histogram(
+                        date_data.dt.second,
+                        f"Second Distribution in {col}",
+                        "Second",
+                        "Count",
+                    )
                     # Converting Plotly figures to JSON
-                    column_info['year_hist'] = json.dumps(fig_year, cls=plotly.utils.PlotlyJSONEncoder)
-                    column_info['month_hist'] = json.dumps(fig_month, cls=plotly.utils.PlotlyJSONEncoder)
-                    column_info['day_hist'] = json.dumps(fig_day, cls=plotly.utils.PlotlyJSONEncoder)
-                    column_info['hour_hist'] = json.dumps(fig_hour, cls=plotly.utils.PlotlyJSONEncoder)
-                    column_info['minute_hist'] = json.dumps(fig_minute, cls=plotly.utils.PlotlyJSONEncoder)
-                    column_info['second_hist'] = json.dumps(fig_second, cls=plotly.utils.PlotlyJSONEncoder)
+                    column_info["year_hist"] = json.dumps(
+                        fig_year, cls=plotly.utils.PlotlyJSONEncoder
+                    )
+                    column_info["month_hist"] = json.dumps(
+                        fig_month, cls=plotly.utils.PlotlyJSONEncoder
+                    )
+                    column_info["day_hist"] = json.dumps(
+                        fig_day, cls=plotly.utils.PlotlyJSONEncoder
+                    )
+                    column_info["hour_hist"] = json.dumps(
+                        fig_hour, cls=plotly.utils.PlotlyJSONEncoder
+                    )
+                    column_info["minute_hist"] = json.dumps(
+                        fig_minute, cls=plotly.utils.PlotlyJSONEncoder
+                    )
+                    column_info["second_hist"] = json.dumps(
+                        fig_second, cls=plotly.utils.PlotlyJSONEncoder
+                    )
                 except Exception as e:
                     print(col, e)
 
-            elif dtype == 'string':
+            elif dtype == "string":
                 try:
                     # TF-IDF scoring for n-grams
                     tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 3))
                     tfidf_matrix = tfidf_vectorizer.fit_transform(data)
                     feature_names = tfidf_vectorizer.get_feature_names_out()
                     tfidf_scores = np.mean(tfidf_matrix, axis=0).tolist()[0]
-                    top_ngrams = sorted(zip(feature_names, tfidf_scores), key=lambda x: x[1], reverse=True)[:20]
-                    fig_tfidf = Figure([Bar(x=[x[0] for x in top_ngrams], y=[x[1] for x in top_ngrams])])
-                    fig_tfidf.update_layout(title=f"Top TF-IDF Scores for {col}", xaxis_title="N-grams",
-                                            yaxis_title="TF-IDF Score")
-                    column_info['tfidf_bar_chart'] = json.dumps(fig_tfidf, cls=plotly.utils.PlotlyJSONEncoder)
+                    top_ngrams = sorted(
+                        zip(feature_names, tfidf_scores),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    )[:20]
+                    fig_tfidf = Figure(
+                        [
+                            Bar(
+                                x=[x[0] for x in top_ngrams],
+                                y=[x[1] for x in top_ngrams],
+                            )
+                        ]
+                    )
+                    fig_tfidf.update_layout(
+                        title=f"Top TF-IDF Scores for {col}",
+                        xaxis_title="N-grams",
+                        yaxis_title="TF-IDF Score",
+                    )
+                    column_info["tfidf_bar_chart"] = json.dumps(
+                        fig_tfidf, cls=plotly.utils.PlotlyJSONEncoder
+                    )
                 except Exception as e:
                     print(col, e)
                 try:
                     # Generate a word cloud image
-                    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(data))
+                    wordcloud = WordCloud(
+                        width=800, height=400, background_color="white"
+                    ).generate(" ".join(data))
                     plt.figure(figsize=(20, 10), facecolor=None)
                     plt.imshow(wordcloud, interpolation="bilinear")
                     plt.axis("off")
@@ -830,34 +984,55 @@ class DataProfile:
                             sizey=1,
                             sizing="stretch",
                             opacity=1.0,
-                            layer="below"
+                            layer="below",
                         )
                     )
                     # Update the layout of the figure to ensure the image fits well
                     fig.update_layout(
-                        xaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 1]),
-                        yaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 1]),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis=dict(
+                            showgrid=False, zeroline=False, visible=False, range=[0, 1]
+                        ),
+                        yaxis=dict(
+                            showgrid=False, zeroline=False, visible=False, range=[0, 1]
+                        ),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
                         margin=dict(l=0, r=0, t=0, b=0),
                         width=800,  # Adjust the width to fit the modal or container size
-                        height=400  # Adjust the height to fit the modal or container size
+                        height=400,  # Adjust the height to fit the modal or container size
                     )
-                    column_info['word_cloud'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+                    column_info["word_cloud"] = json.dumps(
+                        fig, cls=plotly.utils.PlotlyJSONEncoder
+                    )
                 except Exception as e:
                     print(col, e)
 
                 # Modify the text analysis section
                 try:
                     # Text analysis
-                    full_text = ' '.join(data).lower()
-                    cleaned_text = re.sub(r'[^a-zA-Z\s]', '', full_text).strip()  # Efficient cleaning
-                    column_info['description']['flesch reading score'] = round(np.mean(
-                        [textstat.flesch_reading_ease(text) if is_valid_text(text) else 0 for text in data]), 2)
-                    column_info['description']['character count'] = textstat.char_count(cleaned_text,
-                                                                                        ignore_spaces=True)
-                    column_info['description']['polysyllable count'] = textstat.polysyllabcount(cleaned_text)
-                    column_info['description']['monosyllable count'] = textstat.monosyllabcount(cleaned_text)
+                    full_text = " ".join(data).lower()
+                    # Efficient cleaning
+                    cleaned_text = re.sub(r"[^a-zA-Z\s]", "", full_text).strip()
+                    column_info["description"]["flesch reading score"] = round(
+                        np.mean(
+                            [
+                                textstat.flesch_reading_ease(text)
+                                if is_valid_text(text)
+                                else 0
+                                for text in data
+                            ]
+                        ),
+                        2,
+                    )
+                    column_info["description"]["character count"] = textstat.char_count(
+                        cleaned_text, ignore_spaces=True
+                    )
+                    column_info["description"][
+                        "polysyllable count"
+                    ] = textstat.polysyllabcount(cleaned_text)
+                    column_info["description"][
+                        "monosyllable count"
+                    ] = textstat.monosyllabcount(cleaned_text)
 
                 except Exception as e:
                     print(col, e)
@@ -991,44 +1166,53 @@ class DataProfile:
     #     return fig
 
     def fifth_phase(self):
-        if self.skip_table_stats == 'Y':
+        if self.skip_table_stats == "Y":
             return {}
         self.phase_5_dict = {}
 
         # Downsize numerical columns and convert to float32 or int32
-        for col in self.df.select_dtypes(include=['float64']).columns:
-            self.df[col] = self.df[col].astype('float32')
-        for col in self.df.select_dtypes(include=['int64']).columns:
-            self.df[col] = self.df[col].astype('int32')
+        for col in self.df.select_dtypes(include=["float64"]).columns:
+            self.df[col] = self.df[col].astype("float32")
+        for col in self.df.select_dtypes(include=["int64"]).columns:
+            self.df[col] = self.df[col].astype("int32")
 
         # Select numerical columns
-        numerical_cols = self.df.select_dtypes(include=['int32', 'float32']).columns.tolist()
+        numerical_cols = self.df.select_dtypes(
+            include=["int32", "float32"]
+        ).columns.tolist()
         if self.sample_size:
             # Sample data if it's too large
-            self.sample_size = min(self.sample_size, len(self.df))  # Adjust this number based on your needs
-            sampled_df = self.df.sample(n=self.sample_size, random_state=42) if len(
-                self.df) > self.sample_size else self.df
+            # Adjust this number based on your needs
+            self.sample_size = min(self.sample_size, len(self.df))
+            sampled_df = (
+                self.df.sample(n=self.sample_size, random_state=42)
+                if len(self.df) > self.sample_size
+                else self.df
+            )
         else:
             self.sample_size = len(self.df)
             sampled_df = self.df
 
         try:
-            imputer = SimpleImputer(strategy='mean')
+            imputer = SimpleImputer(strategy="mean")
             imputed_data = imputer.fit_transform(sampled_df[numerical_cols])
             scaled_data = StandardScaler().fit_transform(imputed_data)
             # Correlation Analysis
             corr = sampled_df[numerical_cols].corr()
             heatmap_fig = go.Figure(
-                data=go.Heatmap(z=corr.values, x=corr.columns, y=corr.columns, colorscale='Viridis'))
-            heatmap_fig.update_layout(title='Correlation Heatmap')
-            self.phase_5_dict['correlation_heatmap'] = fig_to_json(heatmap_fig)
+                data=go.Heatmap(
+                    z=corr.values, x=corr.columns, y=corr.columns, colorscale="Viridis"
+                )
+            )
+            heatmap_fig.update_layout(title="Correlation Heatmap")
+            self.phase_5_dict["correlation_heatmap"] = fig_to_json(heatmap_fig)
 
         except Exception as e:
             print("Failed Correlation", e)
 
         try:
             # Preprocessing steps like imputation and scaling
-            imputer = SimpleImputer(strategy='mean')
+            imputer = SimpleImputer(strategy="mean")
             imputed_data = imputer.fit_transform(self.df[numerical_cols])
             scaled_data = StandardScaler().fit_transform(imputed_data)
 
@@ -1047,18 +1231,25 @@ class DataProfile:
 
             # Adjusting the index for feature_importance to match scaled_data's features
             scaled_numerical_cols = self.df[numerical_cols].iloc[:, :n_features].columns
-            feature_importance = pd.Series(cumulative_loadings, index=scaled_numerical_cols)
+            feature_importance = pd.Series(
+                cumulative_loadings, index=scaled_numerical_cols
+            )
             # PCA Feature Importance
             # Ensure to round data to 2 decimal places before plotting
             sorted_importance = feature_importance.sort_values(ascending=False).round(2)
 
             # Create a bar plot for the feature contributions to PCA
-            pca_bar_fig = go.Figure(data=go.Bar(x=sorted_importance.index, y=sorted_importance.values))
-            pca_bar_fig.update_layout(title='Feature Contributions to PCA Variance',
-                                      xaxis_title='Column Names', yaxis_title='Cumulative PCA Loadings')
+            pca_bar_fig = go.Figure(
+                data=go.Bar(x=sorted_importance.index, y=sorted_importance.values)
+            )
+            pca_bar_fig.update_layout(
+                title="Feature Contributions to PCA Variance",
+                xaxis_title="Column Names",
+                yaxis_title="Cumulative PCA Loadings",
+            )
 
             # Convert the Plotly figure to JSON
-            self.phase_5_dict['pca_feature_importance'] = fig_to_json(pca_bar_fig)
+            self.phase_5_dict["pca_feature_importance"] = fig_to_json(pca_bar_fig)
 
         except Exception as e:
             print("Failed PCA", e)
@@ -1078,40 +1269,46 @@ class DataProfile:
         Generates an HTML report from the data collected in the data profiling phases.
         """
         self.jinja_data = {
-            'phase1_data': self.phase_1_dict,
-            'custom_data_types': self.custom_data_types,
-            'phase2_data': self.phase_2_dict,
-            'categorical_info': self.categorical_info,
-            'phase3_data': convert_to_serializable(self.phase_3_list),
-            'phase4_data': {col: convert_to_serializable(data) for col, data in
-                            self.phase_4_dict.items()} if self.phase_4_dict else {},
-            'phase5_data': self.phase_5_dict,
-            'random_rows': self.random_rows_df,
-            'number_of_samples': self.sample_size
+            "phase1_data": self.phase_1_dict,
+            "custom_data_types": self.custom_data_types,
+            "phase2_data": self.phase_2_dict,
+            "categorical_info": self.categorical_info,
+            "phase3_data": convert_to_serializable(self.phase_3_list),
+            "phase4_data": {
+                col: convert_to_serializable(data)
+                for col, data in self.phase_4_dict.items()
+            }
+            if self.phase_4_dict
+            else {},
+            "phase5_data": self.phase_5_dict,
+            "random_rows": self.random_rows_df,
+            "number_of_samples": self.sample_size,
         }
         template = self.env.get_template(self.template_name)
-        html_content = template.render(self.jinja_data, get_confidence_color=get_confidence_color)
+        html_content = template.render(
+            self.jinja_data, get_confidence_color=get_confidence_color
+        )
 
         # Minify HTML (including inline JS and CSS)
         minified_html = minify_html(html_content)
 
         # Generate the output file path
-        output_filepath = os.path.join('./', self.output_file_name)
+        output_filepath = os.path.join("./", self.output_file_name)
 
         # Compress and save the minified HTML content as a .gz file
         compress_html(minified_html, output_filepath)
 
         print(f"Compressed HTML report generated: {output_filepath}.gz\n")
         print(format_cache)
-        with open(format_cache_file, 'wb') as f:
+        with open(format_cache_file, "wb") as f:
             pickle.dump(format_cache, f)
 
-        return output_filepath + '.gz'
+        return output_filepath + ".gz"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Specify the folder path
-    folder_path = 'data'
+    folder_path = "data"
 
     # List all the files in the folder
     file_list = os.listdir(folder_path)
@@ -1119,19 +1316,25 @@ if __name__ == '__main__':
     # Iterate through each file
     for file_name in file_list:
         # Check if the file is a CSV file and matches the naming convention
-        if file_name.endswith('.csv') and file_name.startswith('input_'):
+        if file_name.endswith(".csv") and file_name.startswith("input_"):
             # Extract the schema and table name from the file name
             # input_mdjpndl_JP_STG_BtB_AccountMaster.csv
-            schema_name = file_name.split('_')[1]
-            table_name = ("_".join(file_name.split('_')[2:])).split('.')[0]
+            schema_name = file_name.split("_")[1]
+            table_name = ("_".join(file_name.split("_")[2:])).split(".")[0]
             # print(schema_name,table_name)
             # Construct the full file path
             file_path = os.path.join(folder_path, file_name)
 
             # Create a DataProfile object with schema and table name
-            data_profiler = DataProfile(file_path=file_path, env_name='prod', schema_name=schema_name,
-                                        table_name=table_name, output_folder='.', skip_col_stats='N',
-                                        skip_table_stats='N')
+            data_profiler = DataProfile(
+                file_path=file_path,
+                env_name="prod",
+                schema_name=schema_name,
+                table_name=table_name,
+                output_folder=".",
+                skip_col_stats="N",
+                skip_table_stats="N",
+            )
             data_profiler.first_phase()
             data_profiler.second_phase()
             data_profiler.third_phase()
