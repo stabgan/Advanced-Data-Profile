@@ -111,7 +111,7 @@ timezones = ['', '%Z', '%z']
 # Generate permutations for date and time
 date_time_formats = set()
 for y, m, d, dss in product(years, months, days, date_separators):
-    date_format = f"{y}{ds}{m}{dss}{d}".strip()
+    date_format = f"{y}{dss}{m}{dss}{d}".strip()
     for h, mins, s, fs, ampm, ts1, ts2, tz in product(hours, minutes, seconds, fractions, am_pm, time_separators,
                                                       time_separators, timezones):
         time_format = f"{h}{ts1}{mins}{ts2}{s}{fs}{ampm}{tz}".strip()
@@ -123,15 +123,17 @@ for y, m, d, dss in product(years, months, days, date_separators):
 date_time_formats_list = sorted(list(date_time_formats))
 
 # Global cache for successful formats and their frequencies
-format_cache_file = 'format_cache.pkl'
+format_cache_file = os.path.join(current_directory, 'format_cache.pkl')
 format_cache = defaultdict(int)  # Default to 0 for new formats
 
 # Load format cache if exists
 if os.path.exists(format_cache_file):
-    with open(format_cache_file, 'rb') as f:
-        format_cache = pickle.load(f)
+    try:
+        with open(format_cache_file, 'rb') as f:
+            format_cache = pickle.load(f)
+    except (pickle.UnpicklingError, EOFError):
+        format_cache = defaultdict(int)
 
-print(format_cache)
 
 
 def validate_date(dates):
@@ -139,7 +141,7 @@ def validate_date(dates):
     year = dates.dt.year
     month = dates.dt.month
     day = dates.dt.day
-    return ((1900 <= year) & (year <= 2030) & (1 <= month) & (month <= 12) & (1 <= day) & (day <= 31)).all()
+    return ((1900 <= year) & (year <= 2100) & (1 <= month) & (month <= 12) & (1 <= day) & (day <= 31)).all()
 
 
 def parse_dates_with_format(column, fmt):
@@ -305,6 +307,8 @@ def identify_column_type(col):
     # If all elements are identified as 'timestamp', return 'timestamp column'
     elif len(unique_results) == 1 and unique_results[0] == 'timestamp':
         return 'timestamp column'
+
+    return None
 
     # Function to create histogram
 
@@ -495,11 +499,10 @@ class DataProfile:
         #     'WRB': 'Wh-adverb'}
         # Set up Jinja2 environment
         self.env = Environment(loader=FileSystemLoader('.'))
-        with resources.path('Data_Profiler_TCS', 'jinja_template.html') as template_path:
-            # Now, set the loader with the directory of the template
-            template_directory = template_path.parent
-            self.env = Environment(loader=FileSystemLoader(str(template_directory)))
-            self.template_name = 'jinja_template.html'
+        template_ref = resources.files('Data_Profiler_TCS').joinpath('jinja_template.html')
+        template_directory = os.path.dirname(str(template_ref))
+        self.env = Environment(loader=FileSystemLoader(str(template_directory)))
+        self.template_name = 'jinja_template.html'
         self.output_folder = output_folder
         self.output_file_name = os.path.join(self.output_folder,
                                              'data_profiling_report_' + self.schema_name + "_" + self.table_name + '_' + datetime.now().strftime(
@@ -510,10 +513,11 @@ class DataProfile:
 
     def first_phase(self):
         date_time: str = datetime.now().strftime("%m/%d/%Y %I:%M %p")
-        data_volume: float = os.path.getsize(self.file_path) / 1024
+        data_volume_kb: float = os.path.getsize(self.file_path) / 1024
+        data_volume_gb: float = data_volume_kb / (1024 ** 2)
         total_ram: Union[float, Any] = psutil.virtual_memory().total / (1024 ** 3)
         available_ram: Union[float, Any] = psutil.virtual_memory().available / (1024 ** 3)
-        chunksize = 10 ** 6 if data_volume > available_ram else None
+        chunksize = 10 ** 6 if data_volume_gb > available_ram else None
         if chunksize:
             df_chunks = pd.read_csv(self.file_path, chunksize=chunksize, low_memory=False)
             self.df = pd.concat(df_chunks, ignore_index=True)
@@ -548,7 +552,7 @@ class DataProfile:
             'Date/Time': date_time,
             'Has Duplicates': 'Yes' if has_duplicates else 'No',
             'Memory Usage in server': f'{memory_usage:.1f} KB',
-            'Data volume': f'{data_volume:.1f} KB',
+            'Data volume': f'{data_volume_kb:.1f} KB',
             'Total RAM in server': f'{total_ram:.1f} GB',
             'Available RAM in server': f'{available_ram:.1f} GB',
             'Total Row Count': self.df.shape[0],
@@ -1102,7 +1106,6 @@ class DataProfile:
         compress_html(minified_html, output_filepath)
 
         print(f"Compressed HTML report generated: {output_filepath}.gz\n")
-        print(format_cache)
         with open(format_cache_file, 'wb') as f:
             pickle.dump(format_cache, f)
 

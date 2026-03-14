@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+venv.zip
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Byte-compiled / cached
+*.pkl
+format_cache.pkl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output reports (generated)
+output/*.html.gz
+
+# Data models (large binary files)
+# Uncomment if you don't want to track these:
+# Data_Profiler_TCS/data/lid.176.bin
+# Data_Profiler_TCS/data/lid.176.ftz
