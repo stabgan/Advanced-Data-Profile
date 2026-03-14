@@ -111,7 +111,7 @@ timezones = ['', '%Z', '%z']
 # Generate permutations for date and time
 date_time_formats = set()
 for y, m, d, dss in product(years, months, days, date_separators):
-    date_format = f"{y}{ds}{m}{dss}{d}".strip()
+    date_format = f"{y}{dss}{m}{dss}{d}".strip()
     for h, mins, s, fs, ampm, ts1, ts2, tz in product(hours, minutes, seconds, fractions, am_pm, time_separators,
                                                       time_separators, timezones):
         time_format = f"{h}{ts1}{mins}{ts2}{s}{fs}{ampm}{tz}".strip()
@@ -129,7 +129,11 @@ format_cache = defaultdict(int)  # Default to 0 for new formats
 # Load format cache if exists
 if os.path.exists(format_cache_file):
     with open(format_cache_file, 'rb') as f:
-        format_cache = pickle.load(f)
+        loaded_cache = pickle.load(f)
+        if isinstance(loaded_cache, defaultdict):
+            format_cache = loaded_cache
+        else:
+            format_cache.update(loaded_cache)
 
 print(format_cache)
 
@@ -139,7 +143,7 @@ def validate_date(dates):
     year = dates.dt.year
     month = dates.dt.month
     day = dates.dt.day
-    return ((1900 <= year) & (year <= 2030) & (1 <= month) & (month <= 12) & (1 <= day) & (day <= 31)).all()
+    return ((1900 <= year) & (year <= 2050) & (1 <= month) & (month <= 12) & (1 <= day) & (day <= 31)).all()
 
 
 def parse_dates_with_format(column, fmt):
@@ -203,12 +207,12 @@ def custom_data_type(col):
     if col.isnull().all():
         return 'empty'
 
-    if pd.api.types.is_numeric_dtype(col):
+    if col.dtype.kind in ('i', 'u', 'f'):
         if (col.dropna() % 1 == 0).all():
             return 'integer'
         return 'float'
 
-    if pd.api.types.is_string_dtype(col):
+    if col.dtype == object:
         parsed_dates = try_parse_date(col.dropna(), date_time_formats_list)
         if not parsed_dates.isnull().all():
             is_date = ((parsed_dates.dt.hour == 0) & (parsed_dates.dt.minute == 0) & (
@@ -269,7 +273,7 @@ def categorical_confidence(col_data: pd.Series, total_rows: int) -> float:
     if unique_values <= 1:  # Single or no value
         return 0.0
     elif unique_ratio < 0.1:
-        if pd.api.types.is_float_dtype(col_data):
+        if col_data.dtype.kind == 'f':
             col_data = col_data.round(2).astype(str)
         else:
             col_data = col_data.astype(str)
@@ -305,6 +309,8 @@ def identify_column_type(col):
     # If all elements are identified as 'timestamp', return 'timestamp column'
     elif len(unique_results) == 1 and unique_results[0] == 'timestamp':
         return 'timestamp column'
+
+    return None
 
     # Function to create histogram
 
@@ -409,7 +415,7 @@ def convert_to_serializable(val):
     """Convert numpy types, nested collections, and Timestamp objects to native Python types for JSON serialization."""
 
     if isinstance(val, np.generic):
-        if np.issubdtype(val, np.bool_):
+        if isinstance(val, np.bool_):
             return bool(val.item())  # Convert numpy bool_ to Python bool
         return val.item()
     elif isinstance(val, pd.Timestamp):
@@ -495,11 +501,10 @@ class DataProfile:
         #     'WRB': 'Wh-adverb'}
         # Set up Jinja2 environment
         self.env = Environment(loader=FileSystemLoader('.'))
-        with resources.path('Data_Profiler_TCS', 'jinja_template.html') as template_path:
-            # Now, set the loader with the directory of the template
-            template_directory = template_path.parent
-            self.env = Environment(loader=FileSystemLoader(str(template_directory)))
-            self.template_name = 'jinja_template.html'
+        template_ref = resources.files('Data_Profiler_TCS').joinpath('jinja_template.html')
+        template_directory = str(template_ref).rsplit(os.sep, 1)[0]
+        self.env = Environment(loader=FileSystemLoader(template_directory))
+        self.template_name = 'jinja_template.html'
         self.output_folder = output_folder
         self.output_file_name = os.path.join(self.output_folder,
                                              'data_profiling_report_' + self.schema_name + "_" + self.table_name + '_' + datetime.now().strftime(
